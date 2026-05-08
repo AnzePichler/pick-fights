@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  COMPLETED
+}
+
+enum PickMethod {
+  KO_TKO
+  SUBMISSION
+  DECISION
+}
+
+enum FightMethod {
+  KO_TKO
+  SUBMISSION
+  DECISION
+}
+
+enum FightResultStatus {
+  PENDING
+  WINNER
+  DRAW
+  NO_CONTEST
+  CANCELLED
+}
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  displayName  String?
+  imageUrl     String?          @db.Text
+  passwordHash String?
+  role         UserRole         @default(USER)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  submissions  PickSubmission[]
+}
+
+model Event {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  startsAt    DateTime
+  lockAt      DateTime
+  status      EventStatus      @default(DRAFT)
+  isActive    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+  fights      Fight[]
+  submissions PickSubmission[]
+
+  @@index([isActive, status])
+}
+
+model Fighter {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  ranking        Int?
+  country        String?
+  record         String?
+  lastFight      String?
+  age            Int?
+  height         String?
+  reach          String?
+  winsByKo       Int?
+  winsBySub      Int?
+  winsByDec      Int?
+  nickname       String?
+  imageUrl       String?
+  countryFlagUrl String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  fightsAsA       Fight[]       @relation("FighterA")
+  fightsAsB       Fight[]       @relation("FighterB")
+  pickedInChoices PickChoice[]
+  winsInResults   FightResult[]
+}
+
+model Fight {
+  id         String   @id @default(cuid())
+  eventId    String
+  fighterAId String
+  fighterBId String
+  order      Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  event    Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fighterA Fighter      @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)
+  fighterB Fighter      @relation("FighterB", fields: [fighterBId], references: [id], onDelete: Restrict)
+  picks    PickChoice[]
+  result   FightResult?
+
+  @@unique([eventId, order])
+  @@index([eventId])
+  @@index([fighterAId])
+  @@index([fighterBId])
+}
+
+model PickSubmission {
+  id          String   @id @default(cuid())
+  userId      String
+  eventId     String
+  submittedAt DateTime @default(now())
+  isLocked    Boolean  @default(true)
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  choices PickChoice[]
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+}
+
+model PickChoice {
+  id              String      @id @default(cuid())
+  submissionId    String
+  fightId         String
+  pickedFighterId String
+  pickedMethod    PickMethod?
+  pickedRound     Int?
+
+  submission    PickSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fight         Fight          @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  pickedFighter Fighter        @relation(fields: [pickedFighterId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, fightId])
+  @@index([fightId])
+  @@index([pickedFighterId])
+}
+
+model FightResult {
+  id              String            @id @default(cuid())
+  fightId         String            @unique
+  status          FightResultStatus @default(PENDING)
+  winnerFighterId String?
+  method          FightMethod?
+  round           Int?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @default(now()) @updatedAt
+
+  fight         Fight    @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  winnerFighter Fighter? @relation(fields: [winnerFighterId], references: [id], onDelete: Restrict)
+
+  @@index([winnerFighterId])
+}
