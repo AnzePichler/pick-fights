@@ -39,3 +39,5983 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+
+ufc_fighters.json
+Datoteka
+
+updateEventImagesFromUfcEvent.mjs
+Datoteka
+
+updateFightersFromJson.mjs
+Datoteka
+
+scrapeUfcNextEvent.ts
+TypeScript
+
+Navbar.tsx
+TypeScript
+
+FightCard.tsx
+TypeScript
+
+FighterSide.tsx
+TypeScript
+
+types.ts
+TypeScript
+
+SubmitPicksButton.tsx
+TypeScript
+
+FightAccordion.tsx
+TypeScript
+
+page.tsx
+TypeScript
+
+prisma.config.ts
+TypeScript
+
+schema.prisma
+Datoteka
+there we go... all the files of my project
+
+Thought for 11s
+Perfect — I’ve got the project files now.
+
+I can see the main pieces: the scraped fighter data JSON, the Prisma/Neon update scripts, the UFC event image updater, the event scraper, React components, page file, types, and Prisma schema. The uploaded fighter JSON includes the current UFC card data and image URLs 
+
+, and the update scripts already handle DB writes through Prisma with cleaning/scoring logic for fighter images and stats 
+
+ 
+
+.
+
+Send me the exact issue or goal now — for example: fixing wrong fighter images, cleaning the scraper output, improving the UI, debugging Prisma updates, or wiring the whole flow together.
+
+
+alright i want to make it so that when i put this on a server somewhere each of my friends can go to this page and login/sign up then pick his picks for the event on display and then once they are submited they are locked until the end of time haha. then from the /admin page i can put in the reults somehow(still need to make this) and then on the /leaderboard points are tallied up based on how many you had correct 100 points per fight that was correct. for /admin a fight can have winner and a loser or a draw/no contest/the fight didnt happen where 0 points go for either pick... dont start coding lets start with the roadmap
+
+I’ll map this around your current app rather than give a generic product plan: data model first, then auth, picks flow, admin results, scoring, and deployment/security. I’ll avoid code and keep it roadmap-level.
+
+One key design note already stands out: your current result model is “winner required,” but your admin rules need “no winner” outcomes like draw, no contest, or fight cancelled. That is the first schema change to plan before touching pages.
+
+Thought for 1m 3s
+Absolutely — roadmap first. Your current project is already close: the event page fetches one event and renders the fight picker, and the client already submits selected picks to /api/picks/submit with eventId and choices. 
+
+ 
+
+
+Big-picture architecture
+You want four main areas:
+
+Public/auth area
+
+Friends can sign up.
+
+Friends can log in.
+
+Logged-in users can make picks.
+
+Event picks page
+
+Shows the active UFC event.
+
+Lets each user pick one fighter per fight.
+
+Once submitted, picks are locked permanently.
+
+If the event lock time passes, no new submissions.
+
+Admin area
+
+Only you can access it.
+
+You can choose/create/update the active event.
+
+You can enter results after the event.
+
+Each fight result can be:
+
+fighter A won
+
+fighter B won
+
+draw
+
+no contest
+
+cancelled / fight did not happen
+
+Leaderboard
+
+Shows users ranked by points.
+
+100 points per correctly picked winner.
+
+0 points for wrong picks.
+
+0 points for draw/no contest/cancelled fights, no matter who someone picked.
+
+Phase 1: Fix the data model before building pages
+Your current Prisma schema is mostly pointed in the right direction: you already have users, events, fights, submissions, choices, and fight results. The main issue is that your current FightResult shape assumes there is always a winnerFighterId. That will not work cleanly for draw/no contest/cancelled outcomes.
+
+I would evolve the schema conceptually like this:
+
+Add user roles
+Your User needs a role so /admin can be protected.
+
+Conceptually:
+
+User
+- id
+- email
+- username
+- password/auth relation
+- role: USER | ADMIN
+Default everyone to USER; manually make yourself ADMIN.
+
+Add event status
+Your Event should know where it is in the lifecycle.
+
+EventStatus
+- DRAFT
+- OPEN
+- LOCKED
+- COMPLETED
+Then Event has:
+
+status
+isActive
+startsAt
+lockAt
+This lets the app know whether picks are open.
+
+Change result model
+Instead of requiring a winner, make result status explicit.
+
+FightResult
+- fightId
+- status: PENDING | WINNER | DRAW | NO_CONTEST | CANCELLED
+- winnerFighterId nullable
+- method optional
+- round optional
+Rule:
+
+If status = WINNER, winnerFighterId is required.
+If status = DRAW, NO_CONTEST, or CANCELLED, winnerFighterId is null.
+That matches your scoring rule perfectly.
+
+Keep the one-submission rule
+You already want one locked submission per user per event. This should be enforced in the database, not just in the UI. Prisma supports compound unique constraints, which are the right idea for “one row per user/event” or “one choice per submission/fight.” 
+
+Your existing model direction already reflects that idea with a unique user/event submission and unique submission/fight choices. Keep that.
+
+Phase 2: Authentication and friend signup
+Since this is a Next.js/Prisma app, I would choose one of these two paths:
+
+Option A: Auth.js / NextAuth
+This fits your current stack well. Auth.js has a Prisma adapter, and the current docs specifically cover Prisma integration. 
+
+Best for your app:
+
+Email/password or magic link login
+Prisma-backed users
+Role field for admin
+Session available server-side
+Auth.js deployments also require an AUTH_SECRET environment variable for cookies/tokens. 
+
+Option B: Hosted auth like Clerk or Supabase Auth
+This is faster for signup/login UI, but you will still need to sync the user into your Prisma database so picks can be tied to users.
+
+For your app, I would probably pick Auth.js + Prisma because your database is already central to the project.
+
+Friend-only signup
+To avoid random people joining, add one of these:
+
+Simple invite code: everyone needs the same secret code to sign up.
+Per-friend invite links: cleaner, but more work.
+Manual approval: users sign up, you approve them in admin.
+For MVP, use one shared invite code.
+
+Phase 3: Event picks page
+Right now your page is hardcoded to load ufc-328. That is fine for development, but the production version should probably become:
+
+/picks
+or
+
+/event/[slug]
+Then the page should:
+
+Check if the user is logged in.
+
+Fetch the active event.
+
+Fetch fights and fighters.
+
+Check whether this user already submitted picks.
+
+Render one of three states:
+
+Not logged in:
+  show login/signup prompt
+
+Logged in, not submitted, event open:
+  show pick UI
+
+Logged in, already submitted:
+  show locked picks
+
+Event locked:
+  show event locked message
+Your current client picker state is a good start: it tracks selected picks by fightId, requires all fights to be picked, and posts the choices to the submit endpoint. 
+
+
+The important upgrade: the server must be the final authority. The submit endpoint must validate:
+
+User is logged in
+Event exists
+Event is OPEN
+Current time is before lockAt
+User has not already submitted
+Every fight in the event has exactly one pick
+Each picked fighter belongs to that fight
+Then create the submission and all choices in a transaction. Prisma transactions are designed for grouped writes that must succeed or fail together. 
+
+Phase 4: Locked forever behavior
+The UI should say something like:
+
+Once submitted, picks cannot be changed.
+But the actual lock must be enforced in the database/API.
+
+The rules:
+
+A user can create a PickSubmission once.
+A user cannot update it.
+A user cannot delete it from the normal app.
+A user cannot create a second one for the same event.
+So even if someone opens dev tools and tries to POST again, the server rejects it.
+
+For extra safety, keep:
+
+PickSubmission.isLocked = true
+PickSubmission.submittedAt
+unique(userId, eventId)
+The unique constraint is the real lock. isLocked is useful for readability and future admin tools.
+
+Phase 5: Admin page
+Your /admin should be boring, powerful, and protected.
+
+Admin dashboard sections
+/admin
+  - current active event
+  - event status
+  - total users
+  - total submitted picks
+  - missing submissions
+  - results completion status
+Event management
+You need a way to create or replace the active event.
+
+MVP approach:
+
+Admin manually creates event:
+  name
+  slug
+  startsAt
+  lockAt
+
+Admin manually adds fights:
+  fighter A
+  fighter B
+  order
+Better later:
+
+Admin imports/scrapes UFC event
+Admin reviews the scraped card
+Admin clicks "Publish event"
+You already have a scraper that finds the first upcoming UFC event and writes event/fight data to JSON, so that can eventually become your event import workflow. 
+
+ 
+
+
+Results entry
+For each fight, admin sees:
+
+Khamzat Chimaev vs Sean Strickland
+Result:
+  - Pending
+  - Chimaev won
+  - Strickland won
+  - Draw
+  - No contest
+  - Cancelled / did not happen
+Optional fields:
+
+method
+round
+notes
+For your current scoring, method and round do not matter. You can store them later for fun stats, but scoring only needs winner/status.
+
+Result finalization
+I would add two admin actions:
+
+Save draft results
+Finalize results
+Before finalizing, leaderboard can say “unofficial” or still be hidden.
+
+After finalizing, leaderboard is official.
+
+Phase 6: Leaderboard scoring
+Start with computed scoring, not stored scoring.
+
+Meaning: every time /leaderboard loads, calculate points from the database.
+
+Scoring logic:
+
+For each submitted pick:
+  Find the fight result.
+
+  If result.status is WINNER:
+    If pickedFighterId === winnerFighterId:
+      +100
+    Else:
+      +0
+
+  If result.status is DRAW, NO_CONTEST, CANCELLED, or PENDING:
+    +0
+Leaderboard display:
+
+Rank
+Username
+Total points
+Correct picks
+Total scored fights
+Submitted at
+Example:
+
+1. Marko — 900 pts — 9/12 correct
+2. Luka — 800 pts — 8/12 correct
+3. Tim — 700 pts — 7/12 correct
+Later you can add:
+
+Event-by-event history
+All-time leaderboard
+Accuracy percentage
+Perfect card badge
+Most underdog picks
+But MVP should only care about current event.
+
+Phase 7: Routes to build
+Here is the route map I would use:
+
+/
+  Redirect to /picks or show landing page
+
+/login
+  Login form
+
+/signup
+  Signup form with invite code
+
+/picks
+  Current active event picks page
+
+/event/[slug]
+  Optional direct event page
+
+/leaderboard
+  Current event leaderboard
+
+/account
+  User profile and submitted picks
+
+/admin
+  Admin dashboard
+
+/admin/events
+  Create/select active event
+
+/admin/events/[eventId]
+  Manage fights and lock status
+
+/admin/results/[eventId]
+  Enter fight results
+Your navbar already has Make Picks, Leaderboard, and Account links, so the app shell is already aligned with this direction. 
+
+
+Phase 8: Deployment plan
+Your app is already using Prisma config with DATABASE_URL, so deployment should be straightforward once auth and migrations are clean. 
+
+
+For deployment, you need:
+
+Hosted Postgres database
+Next.js hosting
+Environment variables
+Prisma migrations run on deploy
+Auth secret configured
+Admin user seeded or manually promoted
+Environment variables:
+
+DATABASE_URL
+AUTH_SECRET
+AUTH_URL / NEXTAUTH_URL depending on auth setup
+INVITE_CODE
+I would deploy the app first with a manual event in the DB. Do the scraper automation later.
+
+Recommended MVP order
+This is the order I would build it in:
+
+1. Data model migration
+Update the schema for:
+
+User role
+Event status
+Nullable/no-winner fight results
+Better result status enum
+2. Auth
+Build:
+
+signup
+login
+logout
+session check
+admin role
+3. Protected picks
+Build:
+
+/picks requires login
+submit picks endpoint
+locked submission behavior
+show previous locked picks
+4. Admin results
+Build:
+
+/admin protected by role
+result entry form
+save fight results
+support winner/draw/no contest/cancelled
+5. Leaderboard
+Build:
+
+score calculation
+ranked leaderboard
+current event only
+6. Polish
+Add:
+
+countdown to lock
+submission confirmation
+locked-picks receipt
+admin event status controls
+mobile cleanup
+7. Automation later
+After MVP works manually:
+
+scrape next event
+import fights
+update fighter images
+auto-create event draft
+The main design decision
+I would make picks simple and permanent:
+
+Users only pick the winner.
+No method.
+No round.
+100 points per correct winner.
+No winner result = no points.
+Your existing type only stores fighterId for a draft pick, which already matches this MVP perfectly. 
+
+
+Then later, once the core app is working, you can add bonus scoring for method/round if you want. But for now, winner-only is the cleanest path.
+
+
+ok lets do step 1
+
+Great — I’ll update the data model only: roles, event status, result status, and no-winner outcomes. I’ll inspect the current Prisma schema first so the migration fits your existing tables instead of replacing them blindly.
+
+I found one practical mismatch while inspecting the files: your UI submits only pickedFighterId, but the current schema requires pickedMethod. Since your MVP scoring is winner-only, I’m going to make pick method optional instead of forcing fake data.
+
+Thought for 2m 4s
+Step 1 is done: I updated the Prisma data model for the new app direction.
+
+Files I prepared:
+
+Updated schema.prisma
+
+Step 1 migration SQL
+
+What changed:
+
+Added user roles
+
+USER
+
+ADMIN
+
+Made users auth-ready
+
+Added optional passwordHash
+
+Added role
+
+Added updatedAt
+
+Added event lifecycle
+
+DRAFT
+
+OPEN
+
+LOCKED
+
+COMPLETED
+
+Added isActive
+
+Fixed fight results for your admin rules
+
+Added FightResultStatus
+
+Supports:
+
+PENDING
+
+WINNER
+
+DRAW
+
+NO_CONTEST
+
+CANCELLED
+
+Made winnerFighterId nullable so draw/no contest/cancelled can have no winner.
+
+Made picks winner-only compatible
+
+Your current frontend only submits pickedFighterId, not method or round, so I made pickedMethod optional. That matches the MVP scoring idea. 
+
+
+Your PickDraft type is also only { fighterId }, so this aligns the database with the UI. 
+
+
+Kept locked submissions
+
+@@unique([userId, eventId]) still enforces one submission per user per event.
+
+@@unique([submissionId, fightId]) still enforces one pick per fight per submission.
+
+Run this in your project:
+
+cp /path/to/new/schema.prisma prisma/schema.prisma
+npx prisma migrate dev --name step1_roles_event_result_statuses
+npx prisma generate
+One note: I could not run prisma format here because Prisma is not installed in this sandbox environment. The schema syntax is written in valid Prisma style, but run this locally after copying it:
+
+npx prisma format
+Then we can move to Step 2: auth/signup/login.
+
+
+code not files
+
+Thought for 6s
+You’re right — here’s the code directly.
+
+Replace your prisma/schema.prisma with this:
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum EventStatus {
+  DRAFT
+  OPEN
+  LOCKED
+  COMPLETED
+}
+
+enum PickMethod {
+  KO_TKO
+  SUBMISSION
+  DECISION
+}
+
+enum FightMethod {
+  KO_TKO
+  SUBMISSION
+  DECISION
+}
+
+enum FightResultStatus {
+  PENDING
+  WINNER
+  DRAW
+  NO_CONTEST
+  CANCELLED
+}
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  passwordHash String?
+  role         UserRole         @default(USER)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  submissions  PickSubmission[]
+}
+
+model Event {
+  id          String           @id @default(cuid())
+  name        String
+  slug        String           @unique
+  startsAt    DateTime
+  lockAt      DateTime
+  status      EventStatus      @default(DRAFT)
+  isActive    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @default(now()) @updatedAt
+  fights      Fight[]
+  submissions PickSubmission[]
+
+  @@index([isActive, status])
+}
+
+model Fighter {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  ranking        Int?
+  country        String?
+  record         String?
+  lastFight      String?
+  age            Int?
+  height         String?
+  reach          String?
+  winsByKo       Int?
+  winsBySub      Int?
+  winsByDec      Int?
+  nickname       String?
+  imageUrl       String?
+  countryFlagUrl String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  fightsAsA       Fight[]       @relation("FighterA")
+  fightsAsB       Fight[]       @relation("FighterB")
+  pickedInChoices PickChoice[]
+  winsInResults   FightResult[]
+}
+
+model Fight {
+  id         String   @id @default(cuid())
+  eventId    String
+  fighterAId String
+  fighterBId String
+  order      Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  event    Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fighterA Fighter      @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)
+  fighterB Fighter      @relation("FighterB", fields: [fighterBId], references: [id], onDelete: Restrict)
+  picks    PickChoice[]
+  result   FightResult?
+
+  @@unique([eventId, order])
+  @@index([eventId])
+  @@index([fighterAId])
+  @@index([fighterBId])
+}
+
+model PickSubmission {
+  id          String   @id @default(cuid())
+  userId      String
+  eventId     String
+  submittedAt DateTime @default(now())
+  isLocked    Boolean  @default(true)
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  choices PickChoice[]
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+}
+
+model PickChoice {
+  id              String      @id @default(cuid())
+  submissionId    String
+  fightId         String
+  pickedFighterId String
+  pickedMethod    PickMethod?
+  pickedRound     Int?
+
+  submission    PickSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fight         Fight          @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  pickedFighter Fighter        @relation(fields: [pickedFighterId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, fightId])
+  @@index([fightId])
+  @@index([pickedFighterId])
+}
+
+model FightResult {
+  id              String            @id @default(cuid())
+  fightId         String            @unique
+  status          FightResultStatus @default(PENDING)
+  winnerFighterId String?
+  method          FightMethod?
+  round           Int?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @default(now()) @updatedAt
+
+  fight         Fight    @relation(fields: [fightId], references: [id], onDelete: Cascade)
+  winnerFighter Fighter? @relation(fields: [winnerFighterId], references: [id], onDelete: Restrict)
+
+  @@index([winnerFighterId])
+}
+Then run:
+
+npx prisma format
+npx prisma migrate dev --name step1_auth_event_results_schema
+npx prisma generate
+One important thing: Prisma schema cannot directly enforce this rule:
+
+If status = WINNER, winnerFighterId must exist.
+If status = DRAW / NO_CONTEST / CANCELLED / PENDING, winnerFighterId must be null.
+So we’ll enforce that in the admin API when we build /admin/results. Later, we can also add a raw SQL database check constraint if you want extra protection.
+
+
+ok next
+
+Next is auth/signup/login. I’ll keep this code-first and assume your app is using the Next.js App Router, Prisma, and the existing Neon/Postgres setup from your files.
+
+For this step I’m choosing the simplest production-friendly path: Auth.js Credentials login using your existing User.passwordHash field. That means no extra Account/Session tables yet, and your picks can directly attach to user.id.
+
+Thought for 50s
+Yep — Step 2: signup/login/auth.
+
+This gives you:
+
+signup with invite code
+login
+logout
+session support
+user role support
+admin helper
+protected picks page
+Auth.js currently recommends an auth.ts config file and requires AUTH_SECRET for secure tokens/cookies. 
+
+1. Install packages
+npm install next-auth@beta bcryptjs zod
+Generate your auth secret:
+
+npx auth secret
+Then add this to .env:
+
+AUTH_SECRET="whatever-the-command-generated"
+INVITE_CODE="your-friends-only-code"
+For deployed reverse-proxy setups, Auth.js may also need this: 
+
+AUTH_TRUST_HOST=true
+2. Create auth.ts in your project root
+This should be next to package.json, not inside app.
+
+// auth.ts
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+
+const loginSchema = z.object({
+  email: z.string().email().transform((value) => value.toLowerCase()),
+  password: z.string().min(1),
+});
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  session: {
+    strategy: "jwt",
+  },
+
+  pages: {
+    signIn: "/login",
+  },
+
+  providers: [
+    Credentials({
+      name: "Email and password",
+
+      credentials: {
+        email: {
+          label: "Email",
+          type: "email",
+        },
+        password: {
+          label: "Password",
+          type: "password",
+        },
+      },
+
+      async authorize(credentials) {
+        const parsed = loginSchema.safeParse(credentials);
+
+        if (!parsed.success) {
+          return null;
+        }
+
+        const { email, password } = parsed.data;
+
+        const user = await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
+
+        if (!user || !user.passwordHash) {
+          return null;
+        }
+
+        const passwordIsValid = await bcrypt.compare(
+          password,
+          user.passwordHash,
+        );
+
+        if (!passwordIsValid) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.username,
+          username: user.username,
+          role: user.role,
+        };
+      },
+    }),
+  ],
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.username = user.username;
+        token.role = user.role;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.username = token.username;
+        session.user.role = token.role;
+      }
+
+      return session;
+    },
+  },
+});
+3. Create app/api/auth/[...nextauth]/route.ts
+// app/api/auth/[...nextauth]/route.ts
+import { handlers } from "@/auth";
+
+export const { GET, POST } = handlers;
+4. Create types/next-auth.d.ts
+This teaches TypeScript that your session user has id, username, and role.
+
+// types/next-auth.d.ts
+import type { UserRole } from "@prisma/client";
+import type { DefaultSession } from "next-auth";
+
+declare module "next-auth" {
+  interface User {
+    id: string;
+    username: string;
+    role: UserRole;
+  }
+
+  interface Session {
+    user: {
+      id: string;
+      username: string;
+      role: UserRole;
+    } & DefaultSession["user"];
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: string;
+    username: string;
+    role: UserRole;
+  }
+}
+5. Create app/api/auth/signup/route.ts
+This is your friend-only signup endpoint.
+
+// app/api/auth/signup/route.ts
+import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+import { Prisma } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+
+const signupSchema = z.object({
+  email: z
+    .string()
+    .email
+
+big problem.... all but the fighter tables in my prisma studi wont open....
+
+That usually means Prisma Studio is reading a schema that no longer matches the actual database tables. Fighter opening while the others fail is a strong hint that the unchanged/compatible table still works, but tables with new required columns/enums are out of sync.
+
+Stopped thinking
+Hiter odgovor
+
+nevermind its working.... go back to step 2
+
+No worries — we’ll continue Step 2. I’ll pick up from the signup endpoint and include the remaining auth helpers, pages, navbar changes, and route protection.
+
+I checked your uploaded components while continuing: your current page already imports Navbar and FightAccordion, so Step 2 mostly adds auth plumbing plus small guards around the existing picks page.
+
+Thought for 49s
+Got you. Continue Step 2: auth/signup/login, code-only style.
+
+Your current picks UI already posts eventId and choices to /api/picks/submit, so this auth step just gives us real users to attach those picks to later. 
+
+ Your current event page is server-rendered and already loads the UFC event/fights with Prisma, so we’ll protect that page instead of rebuilding it. 
+
+
+Auth.js currently recommends installing next-auth@beta, creating an auth.ts config file, and wiring /app/api/auth/[...nextauth]/route.ts. It also requires AUTH_SECRET. 
+ Credentials auth is the right fit here because you want your own friend signup/login with email/password. 
+
+1. Install packages
+npm install next-auth@beta bcryptjs zod
+Generate the auth secret:
+
+npx auth secret
+Add this to .env:
+
+AUTH_SECRET="the-secret-from-npx-auth-secret"
+INVITE_CODE="whatever-code-you-want-to-give-your-friends"
+2. Create auth.ts in the project root
+This goes next to package.json.
+
+// auth.ts
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+
+import { prisma } from "@/lib/prisma";
+
+const loginSchema = z.object({
+  email: z.string().email().transform((value) => value.toLowerCase()),
+  password: z.string().min(1),
+});
+
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  session: {
+    strategy: "jwt",
+  },
+
+  pages: {
+    signIn: "/login",
+  },
+
+  providers: [
+    Credentials({
+      name: "Email and password",
+
+      credentials: {
+        email: {
+          label: "Email",
+          type: "email",
+        },
+        password: {
+          label: "Password",
+          type: "password",
+        },
+      },
+
+      async authorize(credentials) {
+        const parsed = loginSchema.safeParse(credentials);
+
+        if (!parsed.success) {
+          return null;
+        }
+
+        const { email, password } = parsed.data;
+
+        const user = await prisma.user.findUnique({
+          where: {
+            email,
+          },
+        });
+
+        if (!user || !user.passwordHash) {
+          return null;
+        }
+
+        const passwordIsValid = await bcrypt.compare(
+          password,
+          user.passwordHash,
+        );
+
+        if (!passwordIsValid) {
+          return null;
+        }
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.username,
+          username: user.username,
+          role: user.role,
+        };
+      },
+    }),
+  ],
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.username = user.username;
+        token.role = user.role;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.username = token.username;
+        session.user.role = token.role;
+      }
+
+      return session;
+    },
+  },
+});
+3. Create app/api/auth/[...nextauth]/route.ts
+// app/api/auth/[...nextauth]/route.ts
+import { handlers } from "@/auth";
+
+export const { GET, POST } = handlers;
+4. Create types/next-auth.d.ts
+// types/next-auth.d.ts
+import type { UserRole } from "@prisma/client";
+import type { DefaultSession } from "next-auth";
+
+declare module "next-auth" {
+  interface User {
+    id: string;
+    username: string;
+    role: UserRole;
+  }
+
+  interface Session {
+    user: {
+      id: string;
+      username: string;
+      role: UserRole;
+    } & DefaultSession["user"];
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    id: string;
+    username: string;
+    role: UserRole;
+  }
+}
+5. Create signup endpoint: app/api/auth/signup/route.ts
+// app/api/auth/signup/route.ts
+import { NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+import { Prisma } from "@prisma/client";
+
+import { prisma } from "@/lib/prisma";
+
+const signupSchema = z.object({
+  email: z.string().email().transform((value) => value.toLowerCase()),
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters.")
+    .max(24, "Username must be 24 characters or fewer.")
+    .regex(
+      /^[a-zA-Z0-9_]+$/,
+      "Username can only contain letters, numbers, and underscores.",
+    ),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+  inviteCode: z.string().min(1, "Invite code is required."),
+});
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const parsed = signupSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: parsed.error.issues[0]?.message || "Invalid signup data.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { email, username, password, inviteCode } = parsed.data;
+
+    if (!process.env.INVITE_CODE) {
+      return NextResponse.json(
+        {
+          error: "Server is missing INVITE_CODE.",
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    if (inviteCode !== process.env.INVITE_CODE) {
+      return NextResponse.json(
+        {
+          error: "Invalid invite code.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        username,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        user,
+      },
+      {
+        status: 201,
+      },
+    );
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        {
+          error: "Email or username is already taken.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to create account.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+6. Create login page: app/login/page.tsx
+// app/login/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import LoginForm from "./LoginForm";
+
+export default async function LoginPage() {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect("/picks");
+  }
+
+  return <LoginForm />;
+}
+Create app/login/LoginForm.tsx:
+
+// app/login/LoginForm.tsx
+"use client";
+
+import { FormEvent, useState } from "react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+
+export default function LoginForm() {
+  const router = useRouter();
+
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError(null);
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+
+    const response = await signIn("credentials", {
+      email: String(formData.get("email") || ""),
+      password: String(formData.get("password") || ""),
+      redirect: false,
+    });
+
+    setIsSubmitting(false);
+
+    if (!response || response.error) {
+      setError("Invalid email or password.");
+      return;
+    }
+
+    router.push("/picks");
+    router.refresh();
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6 text-black">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md space-y-5 rounded-3xl bg-white p-8 shadow-sm"
+      >
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">Log in</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Sign in to make your fight picks.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">Email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">Password</span>
+          <input
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full rounded-2xl bg-blue-600 px-5 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-400"
+        >
+          {isSubmitting ? "Logging in..." : "Log in"}
+        </button>
+
+        <p className="text-center text-sm text-neutral-500">
+          Need an account?{" "}
+          <a href="/signup" className="font-bold text-blue-600">
+            Sign up
+          </a>
+        </p>
+      </form>
+    </main>
+  );
+}
+7. Create signup page: app/signup/page.tsx
+// app/signup/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import SignupForm from "./SignupForm";
+
+export default async function SignupPage() {
+  const session = await auth();
+
+  if (session?.user) {
+    redirect("/picks");
+  }
+
+  return <SignupForm />;
+}
+Create app/signup/SignupForm.tsx:
+
+// app/signup/SignupForm.tsx
+"use client";
+
+import { FormEvent, useState } from "react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+
+export default function SignupForm() {
+  const router = useRouter();
+
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError(null);
+    setIsSubmitting(true);
+
+    const formData = new FormData(event.currentTarget);
+
+    const email = String(formData.get("email") || "");
+    const username = String(formData.get("username") || "");
+    const password = String(formData.get("password") || "");
+    const inviteCode = String(formData.get("inviteCode") || "");
+
+    const signupResponse = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        username,
+        password,
+        inviteCode,
+      }),
+    });
+
+    const signupData = await signupResponse.json();
+
+    if (!signupResponse.ok) {
+      setIsSubmitting(false);
+      setError(signupData.error || "Failed to sign up.");
+      return;
+    }
+
+    const loginResponse = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    setIsSubmitting(false);
+
+    if (!loginResponse || loginResponse.error) {
+      setError("Account created, but login failed. Try logging in manually.");
+      return;
+    }
+
+    router.push("/picks");
+    router.refresh();
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-zinc-100 p-6 text-black">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md space-y-5 rounded-3xl bg-white p-8 shadow-sm"
+      >
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">Sign up</h1>
+          <p className="mt-2 text-sm text-neutral-500">
+            Create your account with the invite code.
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+            {error}
+          </div>
+        )}
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">Email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">Username</span>
+          <input
+            name="username"
+            type="text"
+            required
+            autoComplete="username"
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">Password</span>
+          <input
+            name="password"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-bold text-neutral-700">
+            Invite code
+          </span>
+          <input
+            name="inviteCode"
+            type="text"
+            required
+            className="w-full rounded-xl border border-neutral-200 px-4 py-3 outline-none focus:border-blue-500"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="w-full rounded-2xl bg-blue-600 px-5 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-400"
+        >
+          {isSubmitting ? "Creating account..." : "Sign up"}
+        </button>
+
+        <p className="text-center text-sm text-neutral-500">
+          Already have an account?{" "}
+          <a href="/login" className="font-bold text-blue-600">
+            Log in
+          </a>
+        </p>
+      </form>
+    </main>
+  );
+}
+8. Replace components/Navbar.tsx
+Your current navbar links to /test-event, /leaderboard, and /account. 
+
+ Let’s switch the picks link to /picks and show auth/admin links.
+
+// components/Navbar.tsx
+import { signOut } from "@/auth";
+import { auth } from "@/auth";
+
+export default async function Navbar() {
+  const session = await auth();
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur">
+      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <a
+          href="/picks"
+          className="text-2xl font-black italic tracking-tight text-neutral-800"
+        >
+          Pick Fights
+        </a>
+
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 md:flex">
+          <a
+            href="/picks"
+            className="text-lg font-[1000] text-neutral-700 transition hover:text-neutral-800"
+          >
+            Make picks
+          </a>
+
+          <a
+            href="/leaderboard"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Leaderboard
+          </a>
+
+          <a
+            href="/account"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Account
+          </a>
+
+          {session?.user.role === "ADMIN" && (
+            <a
+              href="/admin"
+              className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            >
+              Admin
+            </a>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {session?.user ? (
+            <>
+              <span className="hidden text-sm font-bold text-neutral-500 sm:inline">
+                {session.user.username}
+              </span>
+
+              <form
+                action={async () => {
+                  "use server";
+
+                  await signOut({
+                    redirectTo: "/login",
+                  });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-neutral-700"
+                >
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <a
+                href="/login"
+                className="text-sm font-bold text-neutral-700 transition hover:text-neutral-900"
+              >
+                Log in
+              </a>
+
+              <a
+                href="/signup"
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                Sign up
+              </a>
+            </>
+          )}
+        </div>
+      </nav>
+    </header>
+  );
+}
+9. Move your current event page to app/picks/page.tsx
+Take your current app/test-event/page.tsx logic and replace it with this. This protects the page and redirects logged-out users.
+
+// app/picks/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import FightAccordion from "@/components/picks/FightAccordion";
+import Navbar from "@/components/Navbar";
+
+export const dynamic = "force-dynamic";
+
+export default async function PicksPage() {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const event = await prisma.event.findFirst({
+    where: {
+      isActive: true,
+    },
+    include: {
+      fights: {
+        include: {
+          fighterA: true,
+          fighterB: true,
+        },
+        orderBy: {
+          order: "asc",
+        },
+      },
+      submissions: {
+        where: {
+          userId: session.user.id,
+        },
+        include: {
+          choices: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!event) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">No active event yet.</h1>
+            <p className="mt-2 text-neutral-500">
+              Once an event is active, picks will show up here.
+            </p>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  const existingSubmission = event.submissions[0] || null;
+
+  if (existingSubmission) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">Your picks are locked.</h1>
+
+            <p className="mt-2 text-neutral-500">
+              You already submitted picks for {event.name}. No changes allowed.
+            </p>
+
+            <div className="mt-8 space-y-4">
+              {event.fights.map((fight) => {
+                const choice = existingSubmission.choices.find(
+                  (item) => item.fightId === fight.id,
+                );
+
+                const pickedFighter =
+                  choice?.pickedFighterId === fight.fighterA.id
+                    ? fight.fighterA
+                    : choice?.pickedFighterId === fight.fighterB.id
+                      ? fight.fighterB
+                      : null;
+
+                return (
+                  <div
+                    key={fight.id}
+                    className="rounded-2xl border border-neutral-200 p-5"
+                  >
+                    <div className="font-black text-neutral-800">
+                      {fight.fighterA.name} vs {fight.fighterB.name}
+                    </div>
+
+                    <div className="mt-1 text-sm font-semibold text-neutral-500">
+                      Your pick: {pickedFighter?.name || "Unknown"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  const now = new Date();
+  const picksAreClosed =
+    event.status !== "OPEN" || event.lockAt.getTime() <= now.getTime();
+
+  if (picksAreClosed) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">Picks are closed.</h1>
+            <p className="mt-2 text-neutral-500">
+              The picks window for {event.name} is locked.
+            </p>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <h1 className="text-3xl font-black">{event.name}</h1>
+            <p className="mt-2 text-sm font-semibold text-neutral-500">
+              Pick one fighter for every fight. Once submitted, picks are locked.
+            </p>
+          </div>
+
+          <FightAccordion eventId={event.id} fights={event.fights} />
+        </section>
+      </main>
+    </>
+  );
+}
+Important: this uses isActive: true, so in Prisma Studio make sure your current event has:
+
+isActive = true
+status = OPEN
+Also make sure lockAt is in the future while testing.
+
+10. Create middleware.ts
+This protects /picks, /account, and /admin.
+
+// middleware.ts
+import { NextResponse } from "next/server";
+
+import { auth } from "@/auth";
+
+export default auth((request) => {
+  const { nextUrl } = request;
+  const user = request.auth?.user;
+
+  const isAuthPage =
+    nextUrl.pathname.startsWith("/login") ||
+    nextUrl.pathname.startsWith("/signup");
+
+  const requiresLogin =
+    nextUrl.pathname.startsWith("/picks") ||
+    nextUrl.pathname.startsWith("/account") ||
+    nextUrl.pathname.startsWith("/admin");
+
+  if (isAuthPage && user) {
+    return NextResponse.redirect(new URL("/picks", nextUrl));
+  }
+
+  if (requiresLogin && !user) {
+    return NextResponse.redirect(new URL("/login", nextUrl));
+  }
+
+  if (nextUrl.pathname.startsWith("/admin") && user?.role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/picks", nextUrl));
+  }
+
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: ["/login", "/signup", "/picks/:path*", "/account/:path*", "/admin/:path*"],
+};
+One note: Auth.js docs say that in Next.js 16, middleware.ts has been renamed to proxy.ts; for older App Router versions, middleware.ts is still the normal file. 
+
+11. Promote yourself to admin
+After you sign up, open Prisma Studio and change your user:
+
+role = ADMIN
+Or run SQL:
+
+UPDATE "User"
+SET "role" = 'ADMIN'
+WHERE "email" = 'your-email@example.com';
+12. Test checklist
+Run:
+
+npx prisma generate
+npm run dev
+Then test:
+
+/sign-up without invite code -> should fail
+/signup with invite code -> should create user and log in
+/login -> should work
+/picks while logged out -> redirects to /login
+/picks while logged in -> shows active event
+/admin as normal user -> redirects to /picks
+/admin as ADMIN -> allowed, once we build the admin page
+Next step after this is Step 3: update /api/picks/submit so picks are saved to the logged-in user and locked permanently.
+
+
+(.venv) anzepichler@Anzes-MacBook-Pro-2 app % npm install next-auth@beta bcryptjs zod
+npm error code EACCES
+npm error syscall open
+npm error path /Users/anzepichler/.npm/_cacache/index-v5/9a/c4/c28d57197aaf22532885dafa257a615f793fd33edaa8e28d02c4f37b76df
+npm error errno EACCES
+npm error
+npm error Your cache folder contains root-owned files, due to a bug in
+npm error previous versions of npm which has since been addressed.
+npm error
+npm error To permanently fix this problem, please run:
+npm error   sudo chown -R 501:20 "/Users/anzepichler/.npm"
+npm error A complete log of this run can be found in: /Users/anzepichler/.npm/_logs/2026-05-08T14_44_05_468Z-debug-0.log
+
+That is a local npm permissions issue, not a project issue.
+
+Run exactly what npm suggested:
+
+sudo chown -R 501:20 "/Users/anzepichler/.npm"
+Then try again:
+
+npm install next-auth@beta bcryptjs zod
+If you want the slightly more readable version:
+
+sudo chown -R $(id -u):$(id -g) ~/.npm
+npm install next-auth@beta bcryptjs zod
+Also, you are inside (.venv), which is a Python virtual environment. It should not break npm, but you do not need it for this Next.js project. You can leave it with:
+
+deactivate
+Then run the npm install again.
+
+
+where middleware
+
+Create middleware.ts in your project root — same level as package.json, app/, prisma/, and components/.
+
+Your structure should look like:
+
+your-project/
+├─ app/
+├─ components/
+├─ prisma/
+├─ public/
+├─ auth.ts
+├─ middleware.ts   ← here
+├─ package.json
+├─ tsconfig.json
+Put this inside middleware.ts:
+
+// middleware.ts
+import { NextResponse } from "next/server";
+
+import { auth } from "@/auth";
+
+export default auth((request) => {
+  const { nextUrl } = request;
+  const user = request.auth?.user;
+
+  const isAuthPage =
+    nextUrl.pathname.startsWith("/login") ||
+    nextUrl.pathname.startsWith("/signup");
+
+  const requiresLogin =
+    nextUrl.pathname.startsWith("/picks") ||
+    nextUrl.pathname.startsWith("/account") ||
+    nextUrl.pathname.startsWith("/admin");
+
+  if (isAuthPage && user) {
+    return NextResponse.redirect(new URL("/picks", nextUrl));
+  }
+
+  if (requiresLogin && !user) {
+    return NextResponse.redirect(new URL("/login", nextUrl));
+  }
+
+  if (nextUrl.pathname.startsWith("/admin") && user?.role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/picks", nextUrl));
+  }
+
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: [
+    "/login",
+    "/signup",
+    "/picks/:path*",
+    "/account/:path*",
+    "/admin/:path*",
+  ],
+};
+Not inside app/. It goes at the top/root level.
+
+
+Naložena slika
+couple of issues
+
+Thought for 10s
+Yep — from your screenshot, your project root folder is named app, and inside it you have the actual Next.js app/ directory.
+
+So this is normal:
+
+outer app/        ← project root
+├─ auth.ts        ← correct spot
+├─ components/
+├─ lib/
+├─ prisma/
+├─ public/
+├─ scripts/
+├─ app/           ← Next.js app router folder
+│  ├─ api/
+│  ├─ login/
+│  ├─ picks/
+│  ├─ signup/
+│  ├─ layout.tsx
+│  └─ page.tsx
+Put middleware.ts here
+Create it at the same level as auth.ts, not inside the inner app/ folder.
+
+So your tree should become:
+
+outer app/
+├─ auth.ts
+├─ middleware.ts   ← create it here
+├─ components/
+├─ lib/
+├─ prisma/
+├─ app/
+│  ├─ api/
+│  ├─ login/
+│  ├─ picks/
+│  └─ signup/
+One issue I see
+You currently have a types folder inside the inner Next app folder:
+
+app/
+├─ types/
+For the Auth.js type file, I would not put it there.
+
+Create this instead at the project root:
+
+outer app/
+├─ types/
+│  └─ next-auth.d.ts
+So:
+
+outer app/types/next-auth.d.ts
+Not:
+
+outer app/app/types/next-auth.d.ts
+Your existing uploaded types.ts file can stay wherever your project already uses it, but the Auth.js declaration file should ideally be root-level.
+
+
+do i need to refresh th neon db or do i just run npm run dev to check if it works?!
+
+You do not need to refresh Neon manually.
+
+Do this order:
+
+npx prisma generate
+npm run dev
+Then check:
+
+/signup
+/login
+/picks
+But only run this once if you have not already applied the Step 1 schema changes:
+
+npx prisma migrate dev --name step1_auth_event_results_schema
+npx prisma generate
+After that, normal testing is just:
+
+npm run dev
+For /picks to show the event, make sure in Prisma Studio your current event has:
+
+isActive = true
+status = OPEN
+lockAt = a future date/time
+So the quick answer:
+
+npm run dev
+If you see Prisma/client type errors, run:
+
+npx prisma generate
+
+(.venv) anzepichler@Anzes-MacBook-Pro-2 app % npx prisma generate 
+npm run dev
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.7.0) to ./node_modules/@prisma/client in 117ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+
+> app@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.16:3000
+- Environments: .env
+✓ Ready in 411ms
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/anzepichler/package-lock.json as the root directory.
+ To silence this warning, set turbopack.root in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/anzepichler/Documents/PickFights/app/package-lock.json
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+[auth][error] MissingSecret: Please define a secret. Read more at https://errors.authjs.dev#missingsecret
+    at assertConfig (/Users/anzepichler/Documents/PickFights/app/.next/dev/server/chunks/ssr/0c6l_@auth_core_04toved._.js:513:16)
+    at Auth (/Users/anzepichler/Documents/PickFights/app/.next/dev/server/chunks/ssr/0c6l_@auth_core_04toved._.js:5344:236)
+⨯ TypeError: Cannot read properties of undefined (reading 'role')
+    at Navbar (components/Navbar.tsx:40:21)
+  38 |           </a>
+  39 |
+> 40 |           {session?.user.role === "ADMIN" && (
+     |                     ^
+  41 |             <a
+  42 |               href="/admin"
+  43 |               className="text-lg font-semibold text-gra... {
+  digest: '2770813303'
+}
+ GET /test-event 500 in 2.2s (next.js: 309ms, application-code: 1855ms)
+[browser] Uncaught TypeError: Cannot read properties of undefined (reading 'role')
+    at Navbar (components/Navbar.tsx:40:21)
+  38 |           </a>
+  39 |
+> 40 |           {session?.user.role === "ADMIN" && (
+     |                     ^
+  41 |             <a
+  42 |               href="/admin"
+  43 |               className="text-lg font-semibold text-gra...
+ GET / 200 in 127ms (next.js: 47ms, application-code: 80ms)
+[browser] Image with src "http://localhost:3000/vercel.svg" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: "auto"' or 'height: "auto"' to maintain the aspect ratio.
+[auth][error] MissingSecret: Please define a secret. Read more at https://errors.authjs.dev#missingsecret
+    at assertConfig (/Users/anzepichler/Documents/PickFights/app/.next/dev/server/chunks/ssr/0c6l_@auth_core_04toved._.js:513:16)
+    at Auth (/Users/anzepichler/Documents/PickFights/app/.next/dev/server/chunks/ssr/0c6l_@auth_core_04toved._.js:5344:236)
+⨯ TypeError: Cannot read properties of undefined (reading 'role')
+    at Navbar (components/Navbar.tsx:40:21)
+  38 |           </a>
+  39 |
+> 40 |           {session?.user.role === "ADMIN" && (
+     |                     ^
+  41 |             <a
+  42 |               href="/admin"
+  43 |               className="text-lg font-semibold text-gra... {
+  digest: '2770813303'
+}
+ GET /test-event 500 in 257ms (next.js: 7ms, application-code: 250ms)
+⨯ Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+    at ignore-listed frames
+ GET /signup 404 in 384ms (next.js: -103159µs, proxy.ts: 379ms, application-code: 108ms)
+[browser] Uncaught Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+⨯ Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+    at ignore-listed frames
+ GET /login 404 in 63ms (next.js: -13133µs, proxy.ts: 60ms, application-code: 17ms)
+[browser] Uncaught Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+⨯ Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+    at ignore-listed frames
+ GET /picks 404 in 100ms (next.js: -22906µs, proxy.ts: 82ms, application-code: 40ms)
+[browser] Uncaught Error: The edge runtime does not support Node.js 'crypto' module.
+Learn More: https://nextjs.org/docs/messages/node-module-in-edge-runtime
+
+Thought for 25s
+You’ve got 4 separate issues, and they’re fixable. Do these in this order.
+
+1. Fix MissingSecret
+Your .env is missing AUTH_SECRET, or the dev server was not restarted after adding it.
+
+Run this from your project root:
+
+npx auth secret
+Then open .env and make sure you have:
+
+AUTH_SECRET="the-generated-secret-here"
+INVITE_CODE="whatever-code-you-want"
+Then stop the dev server with Ctrl + C and restart it:
+
+npm run dev
+Auth/session systems need a secret key stored in env; Next’s own auth docs also describe this as required for signed/encrypted session data. 
+
+2. Fix the Navbar crash
+This line is crashing:
+
+{session?.user.role === "ADMIN" && (
+Change it to:
+
+{session?.user?.role === "ADMIN" && (
+So your full admin link block becomes:
+
+{session?.user?.role === "ADMIN" && (
+  <a
+    href="/admin"
+    className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+  >
+    Admin
+  </a>
+)}
+That prevents the app from exploding when session.user is missing because auth failed.
+
+3. Delete proxy.ts / middleware.ts for now
+This error:
+
+The edge runtime does not support Node.js 'crypto' module.
+is coming from your proxy/middleware importing auth.ts, which imports Prisma/bcrypt/Auth stuff. We do not need proxy protection yet. Your /picks page already checks auth() and redirects. The submit/admin APIs will also check auth server-side when we build them. Next’s docs also say Proxy is useful for initial checks, but should not be your only data protection layer. 
+
+For now, delete these files if they exist:
+
+middleware.ts
+proxy.ts
+Later, if we want proxy back, we’ll do the cleaner split-config version.
+
+4. Fix the /signup, /login, /picks 404s
+Make sure the files are in the inner Next app folder, like this:
+
+/Users/anzepichler/Documents/PickFights/app/
+├─ app/
+│  ├─ login/
+│  │  ├─ page.tsx
+│  │  └─ LoginForm.tsx
+│  ├─ signup/
+│  │  ├─ page.tsx
+│  │  └─ SignupForm.tsx
+│  ├─ picks/
+│  │  └─ page.tsx
+│  └─ api/
+│     └─ auth/
+│        ├─ signup/
+│        │  └─ route.ts
+│        └─ [...nextauth]/
+│           └─ route.ts
+├─ auth.ts
+├─ package.json
+└─ .env
+Common mistake: since your project folder is also named app, the route files must go inside:
+
+/Documents/PickFights/app/app/signup/page.tsx
+not:
+
+/Documents/PickFights/app/signup/page.tsx
+5. Fix this workspace-root warning soon
+This warning is because you have a random extra lockfile here:
+
+/Users/anzepichler/package-lock.json
+and your real project lockfile here:
+
+/Users/anzepichler/Documents/PickFights/app/package-lock.json
+Next/Turbopack detects lockfiles to infer the root directory, and its docs say turbopack.root can be set manually when the automatic root is wrong. 
+
+For now, easiest fix:
+
+rm /Users/anzepichler/package-lock.json
+Only do that if /Users/anzepichler/package-lock.json was accidental. If you actually have another Node project directly in your home folder, don’t delete it.
+
+Alternative: create/update next.config.ts:
+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: __dirname,
+  },
+};
+
+export default nextConfig;
+Do this exact order now
+# 1. stop dev server first with Ctrl+C
+
+# 2. make sure AUTH_SECRET exists
+npx auth secret
+
+# 3. delete proxy/middleware for now if they exist
+rm -f middleware.ts proxy.ts
+
+# 4. optional but recommended, if accidental
+rm /Users/anzepichler/package-lock.json
+
+# 5. regenerate and restart
+npx prisma generate
+npm run dev
+Then open:
+
+http://localhost:3000/signup
+http://localhost:3000/login
+http://localhost:3000/picks
+
+this all works now i made a account under my email also checked if login lets you in without signup (it doesnt so good) now that i have my account /picks is empty /test-event works though...
+
+Thought for 7s
+Nice — auth is working. /picks is empty because the new /picks page is probably looking for this:
+
+where: {
+  isActive: true,
+}
+But your existing event from /test-event probably has:
+
+isActive = false
+status = DRAFT
+because we added those fields after the event already existed.
+
+Fix it in Prisma Studio
+Run:
+
+npx prisma studio
+Open the Event table.
+
+Find the event that works on /test-event, probably ufc-328.
+
+Set:
+
+isActive = true
+status = OPEN
+lockAt = some future date/time
+Example:
+
+lockAt = 2026-12-31T23:59:00.000Z
+Save it.
+
+Then refresh:
+
+http://localhost:3000/picks
+Or fix it with SQL
+In Neon SQL editor, run:
+
+UPDATE "Event"
+SET 
+  "isActive" = true,
+  "status" = 'OPEN',
+  "lockAt" = '2026-12-31T23:59:00.000Z'
+WHERE "slug" = 'ufc-328';
+Why /test-event works
+Your old /test-event page is most likely finding the event by a hardcoded slug like ufc-328.
+
+The new /picks page is finding the event by:
+
+active event only
+So right now /picks is saying: “I don’t see any active event.”
+
+Once you mark that event active/open, it should appear.
+
+
+now i selected my picks and submited from the /picks page... does it stop me from doing that more times is the button then dissabled?
+
+Thought for 13s
+Right now: not perfectly yet.
+
+Your current button only disables when:
+
+not all fights are picked
+or
+it is currently submitting
+After a successful submit, your current FightAccordion just does alert("Picks submitted!"); it does not permanently disable the button or refresh the page. 
+
+ The button itself only receives a disabled prop and has no “submitted forever” state. 
+
+
+So the answer is:
+
+UI button: not locked after submit yet.
+Database: should block duplicates if your unique user/event rule exists.
+Server route: we still need to make it enforce the lock properly.
+The real lock should be in /api/picks/submit, not just the button. A user can always mess with the browser, so the API has to say:
+
+Are you logged in?
+Is the event open?
+Is lockAt still in the future?
+Have you already submitted for this event?
+Are these picks valid for this event?
+If all yes, save once.
+Otherwise reject.
+Then after submit, the frontend should either:
+
+router.refresh()
+or set a local submitted state so the button disappears.
+
+That is exactly Step 3. Next we should update /api/picks/submit and then tweak FightAccordion so after submitting it refreshes into the “your picks are locked” view.
+
+
+ok
+
+Thought for 15s
+Perfect — now we do Step 3: lock submissions for real.
+
+This step changes two things:
+
+1. /api/picks/submit becomes the real security lock.
+2. FightAccordion refreshes after submit so /picks shows the locked view.
+Your current FightAccordion posts eventId and choices, then only shows an alert. It does not refresh into the locked view yet. 
+
+ Your submit button only disables based on pick count/submitting state, not permanent submission state. 
+
+
+1. Replace/create app/api/picks/submit/route.ts
+Path should be:
+
+your-project/app/api/picks/submit/route.ts
+Remember: that is inside your inner Next.js app/ folder.
+
+// app/api/picks/submit/route.ts
+import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
+import { z } from "zod";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const submitPicksSchema = z.object({
+  eventId: z.string().min(1),
+  choices: z
+    .array(
+      z.object({
+        fightId: z.string().min(1),
+        pickedFighterId: z.string().min(1),
+      }),
+    )
+    .min(1),
+});
+
+export async function POST(request: Request) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          error: "You must be logged in to submit picks.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
+
+    const body = await request.json();
+    const parsed = submitPicksSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Invalid picks submission.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { eventId, choices } = parsed.data;
+    const userId = session.user.id;
+
+    const event = await prisma.event.findUnique({
+      where: {
+        id: eventId,
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        lockAt: true,
+        fights: {
+          select: {
+            id: true,
+            fighterAId: true,
+            fighterBId: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return NextResponse.json(
+        {
+          error: "Event not found.",
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    if (event.status !== "OPEN") {
+      return NextResponse.json(
+        {
+          error: "Picks are closed for this event.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
+
+    if (event.lockAt.getTime() <= Date.now()) {
+      return NextResponse.json(
+        {
+          error: "This event is already locked.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
+
+    if (event.fights.length === 0) {
+      return NextResponse.json(
+        {
+          error: "This event has no fights.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const existingSubmission = await prisma.pickSubmission.findUnique({
+      where: {
+        userId_eventId: {
+          userId,
+          eventId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingSubmission) {
+      return NextResponse.json(
+        {
+          error: "You already submitted picks for this event. Picks are locked.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
+    const fightsById = new Map(
+      event.fights.map((fight) => {
+        return [fight.id, fight];
+      }),
+    );
+
+    const submittedFightIds = new Set(choices.map((choice) => choice.fightId));
+
+    if (submittedFightIds.size !== choices.length) {
+      return NextResponse.json(
+        {
+          error: "You submitted duplicate picks for the same fight.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (choices.length !== event.fights.length) {
+      return NextResponse.json(
+        {
+          error: "You must pick every fight before submitting.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    for (const choice of choices) {
+      const fight = fightsById.get(choice.fightId);
+
+      if (!fight) {
+        return NextResponse.json(
+          {
+            error: "One of your picks is for a fight that is not in this event.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
+      const pickedFighterBelongsToFight =
+        choice.pickedFighterId === fight.fighterAId ||
+        choice.pickedFighterId === fight.fighterBId;
+
+      if (!pickedFighterBelongsToFight) {
+        return NextResponse.json(
+          {
+            error: "One of your picks is not a fighter in that fight.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+    }
+
+    const submission = await prisma.pickSubmission.create({
+      data: {
+        userId,
+        eventId,
+        isLocked: true,
+        choices: {
+          create: choices.map((choice) => ({
+            fightId: choice.fightId,
+            pickedFighterId: choice.pickedFighterId,
+          })),
+        },
+      },
+      select: {
+        id: true,
+        submittedAt: true,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        submission,
+      },
+      {
+        status: 201,
+      },
+    );
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        {
+          error: "You already submitted picks for this event. Picks are locked.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to submit picks.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+This is the real lock. Even if someone tries to spam the endpoint manually, the API rejects the second submission.
+
+2. Replace components/picks/FightAccordion.tsx
+This version does two new things:
+
+router.refresh()
+submitted state disables the button immediately
+// components/picks/FightAccordion.tsx
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import FightCard from "./FightCard";
+import SubmitPicksButton from "./SubmitPicksButton";
+import type { Fight, PickDraft } from "./types";
+
+type Props = {
+  eventId: string;
+  fights: Fight[];
+};
+
+export default function FightAccordion({ eventId, fights }: Props) {
+  const router = useRouter();
+
+  const [selectedPicks, setSelectedPicks] = useState<Record<string, PickDraft>>(
+    {},
+  );
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  function selectFighter(fightId: string, fighterId: string) {
+    if (hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    setSelectedPicks((current) => {
+      const alreadySelected = current[fightId]?.fighterId === fighterId;
+
+      if (alreadySelected) {
+        const updated = { ...current };
+        delete updated[fightId];
+        return updated;
+      }
+
+      return {
+        ...current,
+        [fightId]: {
+          fighterId,
+        },
+      };
+    });
+  }
+
+  async function submitPicks() {
+    if (hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    const choices = Object.entries(selectedPicks).map(([fightId, pick]) => ({
+      fightId,
+      pickedFighterId: pick.fighterId,
+    }));
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/picks/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId,
+          choices,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Failed to submit picks.");
+        return;
+      }
+
+      setHasSubmitted(true);
+      alert("Picks submitted and locked!");
+
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit picks.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const totalFights = fights.length;
+  const pickedCount = Object.keys(selectedPicks).length;
+  const allPicksMade = pickedCount === totalFights;
+
+  return (
+    <>
+      <div className="space-y-5 pb-32">
+        {fights.map((fight) => (
+          <FightCard
+            key={fight.id}
+            fight={fight}
+            selectedFighterId={selectedPicks[fight.id]?.fighterId}
+            onSelectFighter={selectFighter}
+          />
+        ))}
+      </div>
+
+      <SubmitPicksButton
+        pickedCount={pickedCount}
+        totalFights={totalFights}
+        disabled={!allPicksMade || isSubmitting || hasSubmitted}
+        isSubmitting={isSubmitting}
+        onSubmit={submitPicks}
+      />
+    </>
+  );
+}
+3. Optional: improve the submit button text
+Replace components/picks/SubmitPicksButton.tsx with this small upgrade.
+
+// components/picks/SubmitPicksButton.tsx
+type Props = {
+  pickedCount: number;
+  totalFights: number;
+  disabled: boolean;
+  isSubmitting: boolean;
+  onSubmit: () => void;
+};
+
+export default function SubmitPicksButton({
+  pickedCount,
+  totalFights,
+  disabled,
+  isSubmitting,
+  onSubmit,
+}: Props) {
+  const pickPercentage =
+    totalFights === 0 ? 0 : Math.round((pickedCount / totalFights) * 100);
+
+  const allPicksMade = pickedCount === totalFights;
+  const label = isSubmitting
+    ? "Submitting..."
+    : disabled && allPicksMade
+      ? "Picks Locked"
+      : disabled
+        ? `Make Picks ${pickedCount}/${totalFights}`
+        : "Submit Picks";
+
+  return (
+    <div className="fixed bottom-8 left-1/2 z-50 w-54 -translate-x-1/2">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onSubmit}
+        className={`relative w-full overflow-hidden rounded-2xl px-6 py-4 text-center font-bold shadow-lg transition ${
+          disabled
+            ? "cursor-not-allowed text-white"
+            : "cursor-pointer text-white"
+        }`}
+      >
+        <div className="absolute inset-0 bg-neutral-400" />
+
+        <div
+          className="absolute inset-y-0 left-0 bg-blue-500 transition-all duration-300"
+          style={{ width: `${pickPercentage}%` }}
+        />
+
+        <span className="relative z-10">{label}</span>
+      </button>
+    </div>
+  );
+}
+4. Test it
+Since you already submitted picks once, refresh /picks.
+
+Expected result:
+
+You should see “Your picks are locked.”
+No submit button.
+Your selected picks listed.
+Then test the real API lock by trying to submit again from the UI or browser dev tools. It should return:
+
+409
+"You already submitted picks for this event. Picks are locked."
+You can also confirm in Prisma Studio:
+
+PickSubmission table:
+  one row for your user + this event
+
+PickChoice table:
+  one row per fight
+Next step after this is Step 4: build /admin so you can enter fight results.
+
+
+well its good i cant pick anymore but i still want the ui to be the same just that i cant switch picks or click submit (can still see everything including accordion additional info)
+
+Thought for 30s
+Exactly — better UX.
+
+Instead of replacing the whole page with a boring “Your picks are locked” list, we’ll keep the same fight accordion UI, pre-select your submitted picks, and make it read-only.
+
+Your current UI already highlights selected fighters using selectedFighterId in FightCard, so we just need to feed your saved picks back into FightAccordion and disable changes. 
+
+ 
+
+
+1. Replace app/picks/page.tsx
+This keeps the same accordion for both open and locked states.
+
+// app/picks/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import FightAccordion from "@/components/picks/FightAccordion";
+import Navbar from "@/components/Navbar";
+import type { PickDraft } from "@/components/picks/types";
+
+export const dynamic = "force-dynamic";
+
+export default async function PicksPage() {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const event = await prisma.event.findFirst({
+    where: {
+      isActive: true,
+    },
+    include: {
+      fights: {
+        include: {
+          fighterA: true,
+          fighterB: true,
+        },
+        orderBy: {
+          order: "asc",
+        },
+      },
+      submissions: {
+        where: {
+          userId: session.user.id,
+        },
+        include: {
+          choices: true,
+        },
+        take: 1,
+      },
+    },
+  });
+
+  if (!event) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">No active event yet.</h1>
+            <p className="mt-2 text-neutral-500">
+              Once an event is active, picks will show up here.
+            </p>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  const existingSubmission = event.submissions[0] || null;
+
+  const initialPicks: Record<string, PickDraft> = {};
+
+  if (existingSubmission) {
+    for (const choice of existingSubmission.choices) {
+      initialPicks[choice.fightId] = {
+        fighterId: choice.pickedFighterId,
+      };
+    }
+  }
+
+  const now = new Date();
+
+  const picksAreLocked =
+    Boolean(existingSubmission) ||
+    event.status !== "OPEN" ||
+    event.lockAt.getTime() <= now.getTime();
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <h1 className="text-3xl font-black">{event.name}</h1>
+
+            {existingSubmission ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Your picks are submitted and locked. You can still open each
+                fight to view the details.
+              </p>
+            ) : picksAreLocked ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Picks are closed for this event.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Pick one fighter for every fight. Once submitted, picks are
+                locked.
+              </p>
+            )}
+          </div>
+
+          <FightAccordion
+            eventId={event.id}
+            fights={event.fights}
+            initialPicks={initialPicks}
+            isLocked={picksAreLocked}
+          />
+        </section>
+      </main>
+    </>
+  );
+}
+2. Replace components/picks/FightAccordion.tsx
+This keeps selected picks visible, but blocks switching when locked.
+
+// components/picks/FightAccordion.tsx
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import FightCard from "./FightCard";
+import SubmitPicksButton from "./SubmitPicksButton";
+import type { Fight, PickDraft } from "./types";
+
+type Props = {
+  eventId: string;
+  fights: Fight[];
+  initialPicks?: Record<string, PickDraft>;
+  isLocked?: boolean;
+};
+
+export default function FightAccordion({
+  eventId,
+  fights,
+  initialPicks = {},
+  isLocked = false,
+}: Props) {
+  const router = useRouter();
+
+  const [selectedPicks, setSelectedPicks] =
+    useState<Record<string, PickDraft>>(initialPicks);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  function selectFighter(fightId: string, fighterId: string) {
+    if (isLocked || hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    setSelectedPicks((current) => {
+      const alreadySelected = current[fightId]?.fighterId === fighterId;
+
+      if (alreadySelected) {
+        const updated = { ...current };
+        delete updated[fightId];
+        return updated;
+      }
+
+      return {
+        ...current,
+        [fightId]: {
+          fighterId,
+        },
+      };
+    });
+  }
+
+  async function submitPicks() {
+    if (isLocked || hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    const choices = Object.entries(selectedPicks).map(([fightId, pick]) => ({
+      fightId,
+      pickedFighterId: pick.fighterId,
+    }));
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/picks/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId,
+          choices,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Failed to submit picks.");
+        return;
+      }
+
+      setHasSubmitted(true);
+      alert("Picks submitted and locked!");
+
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit picks.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const totalFights = fights.length;
+  const pickedCount = Object.keys(selectedPicks).length;
+  const allPicksMade = pickedCount === totalFights;
+
+  return (
+    <>
+      <div className="space-y-5 pb-32">
+        {fights.map((fight) => (
+          <FightCard
+            key={fight.id}
+            fight={fight}
+            selectedFighterId={selectedPicks[fight.id]?.fighterId}
+            onSelectFighter={selectFighter}
+            isLocked={isLocked || hasSubmitted}
+          />
+        ))}
+      </div>
+
+      <SubmitPicksButton
+        pickedCount={pickedCount}
+        totalFights={totalFights}
+        disabled={!allPicksMade || isSubmitting || hasSubmitted || isLocked}
+        isSubmitting={isSubmitting}
+        isLocked={isLocked || hasSubmitted}
+        onSubmit={submitPicks}
+      />
+    </>
+  );
+}
+3. Replace components/picks/FightCard.tsx prop section only
+At the top of FightCard.tsx, update the props and component signature.
+
+Change this:
+
+type Props = {
+  fight: Fight;
+  selectedFighterId: string | undefined;
+  onSelectFighter: (fightId: string, fighterId: string) => void;
+};
+
+export default function FightCard({
+  fight,
+  selectedFighterId,
+  onSelectFighter,
+}: Props) {
+to this:
+
+type Props = {
+  fight: Fight;
+  selectedFighterId: string | undefined;
+  onSelectFighter: (fightId: string, fighterId: string) => void;
+  isLocked?: boolean;
+};
+
+export default function FightCard({
+  fight,
+  selectedFighterId,
+  onSelectFighter,
+  isLocked = false,
+}: Props) {
+Then in the two FighterSide components, add isLocked.
+
+Change fighter A:
+
+<FighterSide
+  fighter={fight.fighterA}
+  align="left"
+  onSelect={() => onSelectFighter(fight.id, fight.fighterA.id)}
+/>
+to:
+
+<FighterSide
+  fighter={fight.fighterA}
+  align="left"
+  onSelect={() => onSelectFighter(fight.id, fight.fighterA.id)}
+  isLocked={isLocked}
+/>
+Change fighter B:
+
+<FighterSide
+  fighter={fight.fighterB}
+  align="right"
+  onSelect={() => onSelectFighter(fight.id, fight.fighterB.id)}
+/>
+to:
+
+<FighterSide
+  fighter={fight.fighterB}
+  align="right"
+  onSelect={() => onSelectFighter(fight.id, fight.fighterB.id)}
+  isLocked={isLocked}
+/>
+4. Replace components/picks/FighterSide.tsx
+This allows the accordion to still open while preventing pick switching.
+
+// components/picks/FighterSide.tsx
+import type { Fighter } from "./types";
+
+type Props = {
+  fighter: Fighter;
+  align: "left" | "right";
+  onSelect: () => void;
+  isLocked?: boolean;
+};
+
+export default function FighterSide({
+  fighter,
+  align,
+  onSelect,
+  isLocked = false,
+}: Props) {
+  const isRight = align === "right";
+  const rankLabel = getRankLabel(fighter);
+
+  return (
+    <button
+      type="button"
+      aria-disabled={isLocked}
+      onClick={(event) => {
+        if (isLocked) {
+          return;
+        }
+
+        event.preventDefault();
+        onSelect();
+      }}
+      className={`w-full rounded-2xl p-3 transition ${
+        isLocked ? "cursor-default" : "hover:bg-zinc-50"
+      } ${isRight ? "text-right" : "text-left"}`}
+    >
+      <div
+        className={`flex items-center gap-4 ${isRight ? "justify-end" : ""}`}
+      >
+        {!isRight && <FighterImage fighter={fighter} />}
+
+        <div className="min-w-0">
+          {rankLabel && (
+            <p
+              className={`inline-flex items-center px-1 text-md font-black ${
+                rankLabel === "C"
+                  ? "mb-0.5 bg-[#ba922d] text-white"
+                  : "bg-transparent text-lg text-gray-400"
+              }`}
+            >
+              {rankLabel}
+            </p>
+          )}
+
+          <h2 className="text-2xl font-bold text-neutral-800">
+            {fighter.name}
+          </h2>
+
+          <div
+            className={`flex flex-wrap items-center gap-2 text-base font-[510] text-neutral-500 ${
+              isRight ? "justify-end" : ""
+            }`}
+          >
+            {!isRight && <CountryFlag fighter={fighter} />}
+
+            <span>{fighter.record || "Record unavailable"}</span>
+
+            {isRight && <CountryFlag fighter={fighter} />}
+          </div>
+        </div>
+
+        {isRight && <FighterImage fighter={fighter} />}
+      </div>
+    </button>
+  );
+}
+
+function FighterImage({ fighter }: { fighter: Fighter }) {
+  return (
+    <div className="h-36 w-36 shrink-0 overflow-hidden rounded-xl">
+      <img
+        src={fighter.imageUrl || "/fighter-placeholder.png"}
+        alt={fighter.name}
+        className="h-full w-full object-cover object-top"
+      />
+    </div>
+  );
+}
+
+function CountryFlag({ fighter }: { fighter: Fighter }) {
+  if (!fighter.countryFlagUrl) return null;
+
+  return (
+    <span className="inline-flex h-5 w-7 shrink-0 overflow-hidden">
+      <img
+        src={fighter.countryFlagUrl}
+        alt={fighter.country || "Country flag"}
+        title={fighter.country || undefined}
+        className="h-full w-full object-cover"
+      />
+    </span>
+  );
+}
+
+function getRankLabel(fighter: Fighter) {
+  if (isChampion(fighter)) return "C";
+  if (fighter.ranking != null) return `#${fighter.ranking}`;
+  return null;
+}
+
+function isChampion(fighter: Fighter) {
+  const imageUrl = (fighter.imageUrl || "").toUpperCase();
+  return imageUrl.includes("BELT");
+}
+5. Replace components/picks/SubmitPicksButton.tsx
+This keeps the same bottom button but shows Picks Locked.
+
+// components/picks/SubmitPicksButton.tsx
+type Props = {
+  pickedCount: number;
+  totalFights: number;
+  disabled: boolean;
+  isSubmitting: boolean;
+  isLocked?: boolean;
+  onSubmit: () => void;
+};
+
+export default function SubmitPicksButton({
+  pickedCount,
+  totalFights,
+  disabled,
+  isSubmitting,
+  isLocked = false,
+  onSubmit,
+}: Props) {
+  const pickPercentage =
+    totalFights === 0 ? 0 : Math.round((pickedCount / totalFights) * 100);
+
+  const label = isSubmitting
+    ? "Submitting..."
+    : isLocked
+      ? "Picks Locked"
+      : disabled
+        ? `Make Picks ${pickedCount}/${totalFights}`
+        : "Submit Picks";
+
+  return (
+    <div className="fixed bottom-8 left-1/2 z-50 w-54 -translate-x-1/2">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onSubmit}
+        className={`relative w-full overflow-hidden rounded-2xl px-6 py-4 text-center font-bold shadow-lg transition ${
+          disabled
+            ? "cursor-not-allowed text-white"
+            : "cursor-pointer text-white"
+        }`}
+      >
+        <div className="absolute inset-0 bg-neutral-400" />
+
+        <div
+          className="absolute inset-y-0 left-0 bg-blue-500 transition-all duration-300"
+          style={{ width: `${pickPercentage}%` }}
+        />
+
+        <span className="relative z-10">{label}</span>
+      </button>
+    </div>
+  );
+}
+Now after submitting:
+
+/picks still shows all fight cards
+your selected fighters still have the blue/checkmark UI
+accordion details still work
+fighter clicks do not change picks
+submit button is disabled and says Picks Locked
+The API lock from Step 3 still stays in place, so this is just the nicer UI layer.
+
+
+Naložena slika
+Naložena slika
+Naložena slika
+Naložena slika
+just fix theese
+
+Thought for 45s
+Replace your app/picks/page.tsx with this version. This avoids the event.submissions typing issue by fetching the submission separately.
+
+// app/picks/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import FightAccordion from "@/components/picks/FightAccordion";
+import Navbar from "@/components/Navbar";
+import type { PickDraft } from "@/components/picks/types";
+
+export const dynamic = "force-dynamic";
+
+export default async function PicksPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const event = await prisma.event.findFirst({
+    where: {
+      isActive: true,
+    },
+    include: {
+      fights: {
+        include: {
+          fighterA: true,
+          fighterB: true,
+        },
+        orderBy: {
+          order: "asc",
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">No active event yet.</h1>
+            <p className="mt-2 text-neutral-500">
+              Once an event is active, picks will show up here.
+            </p>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  const existingSubmission = await prisma.pickSubmission.findUnique({
+    where: {
+      userId_eventId: {
+        userId: session.user.id,
+        eventId: event.id,
+      },
+    },
+    include: {
+      choices: true,
+    },
+  });
+
+  const initialPicks: Record<string, PickDraft> = {};
+
+  if (existingSubmission) {
+    for (const choice of existingSubmission.choices) {
+      initialPicks[choice.fightId] = {
+        fighterId: choice.pickedFighterId,
+      };
+    }
+  }
+
+  const now = new Date();
+
+  const picksAreLocked =
+    Boolean(existingSubmission) ||
+    event.status !== "OPEN" ||
+    event.lockAt.getTime() <= now.getTime();
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <h1 className="text-3xl font-black">{event.name}</h1>
+
+            {existingSubmission ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Your picks are submitted and locked. You can still open each
+                fight to view the details.
+              </p>
+            ) : picksAreLocked ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Picks are closed for this event.
+              </p>
+            ) : (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Pick one fighter for every fight. Once submitted, picks are
+                locked.
+              </p>
+            )}
+          </div>
+
+          <FightAccordion
+            eventId={event.id}
+            fights={event.fights}
+            initialPicks={initialPicks}
+            isLocked={picksAreLocked}
+          />
+        </section>
+      </main>
+    </>
+  );
+}
+Now update components/picks/FightAccordion.tsx so initialPicks and isLocked are valid props:
+
+// components/picks/FightAccordion.tsx
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+
+import FightCard from "./FightCard";
+import SubmitPicksButton from "./SubmitPicksButton";
+import type { Fight, PickDraft } from "./types";
+
+type Props = {
+  eventId: string;
+  fights: Fight[];
+  initialPicks?: Record<string, PickDraft>;
+  isLocked?: boolean;
+};
+
+export default function FightAccordion({
+  eventId,
+  fights,
+  initialPicks = {},
+  isLocked = false,
+}: Props) {
+  const router = useRouter();
+
+  const [selectedPicks, setSelectedPicks] =
+    useState<Record<string, PickDraft>>(initialPicks);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+
+  function selectFighter(fightId: string, fighterId: string) {
+    if (isLocked || hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    setSelectedPicks((current) => {
+      const alreadySelected = current[fightId]?.fighterId === fighterId;
+
+      if (alreadySelected) {
+        const updated = { ...current };
+        delete updated[fightId];
+        return updated;
+      }
+
+      return {
+        ...current,
+        [fightId]: {
+          fighterId,
+        },
+      };
+    });
+  }
+
+  async function submitPicks() {
+    if (isLocked || hasSubmitted || isSubmitting) {
+      return;
+    }
+
+    const choices = Object.entries(selectedPicks).map(([fightId, pick]) => ({
+      fightId,
+      pickedFighterId: pick.fighterId,
+    }));
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/picks/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId,
+          choices,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Failed to submit picks.");
+        return;
+      }
+
+      setHasSubmitted(true);
+      alert("Picks submitted and locked!");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit picks.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const totalFights = fights.length;
+  const pickedCount = Object.keys(selectedPicks).length;
+  const allPicksMade = pickedCount === totalFights;
+  const locked = isLocked || hasSubmitted;
+
+  return (
+    <>
+      <div className="space-y-5 pb-32">
+        {fights.map((fight) => (
+          <FightCard
+            key={fight.id}
+            fight={fight}
+            selectedFighterId={selectedPicks[fight.id]?.fighterId}
+            onSelectFighter={selectFighter}
+            isLocked={locked}
+          />
+        ))}
+      </div>
+
+      <SubmitPicksButton
+        pickedCount={pickedCount}
+        totalFights={totalFights}
+        disabled={!allPicksMade || isSubmitting || locked}
+        isSubmitting={isSubmitting}
+        isLocked={locked}
+        onSubmit={submitPicks}
+      />
+    </>
+  );
+}
+
+If isActive, status, or lockAt are still red after this, run:
+
+npx prisma generate
+Then in VS Code:
+
+Cmd + Shift + P
+TypeScript: Restart TS Server
+That last part is just VS Code using stale Prisma types.
+
+
+now how do we make the picks default page ...
+
+Thought for 6s
+Make /picks the default by replacing your inner app/page.tsx.
+
+Path:
+
+your-project/app/page.tsx
+Remember, that is the Next app folder:
+
+PickFights/app/app/page.tsx
+Replace it with:
+
+// app/page.tsx
+import { redirect } from "next/navigation";
+
+export default function HomePage() {
+  redirect("/picks");
+}
+Now when someone goes to:
+
+http://localhost:3000
+they get sent to:
+
+/picks
+If they are logged out, /picks will send them to /login.
+
+Optional: make old /test-event redirect too, so you stop using the old route.
+
+Replace app/test-event/page.tsx with:
+
+// app/test-event/page.tsx
+import { redirect } from "next/navigation";
+
+export default function TestEventPage() {
+  redirect("/picks");
+}
+Then your main flow is:
+
+/ → /picks
+logged out → /login
+logged in → picks page
+submitted already → locked picks UI
+
+Naložena slika
+cool... now lets make the account page where you can change your display name and display pic
+
+Thought for 34s
+Yep — let’s build /account properly.
+
+We’ll add:
+
+display name
+profile picture
+save changes
+navbar avatar/name updates
+For the profile pic, this version stores a small compressed image data URL in Neon. That keeps it simple: no S3/Cloudinary yet. For a friend group, this is totally fine. Later, if the app gets bigger, we can swap profile images to Cloudinary/S3.
+
+1. Update prisma/schema.prisma
+In your User model, add these two fields:
+
+displayName  String?
+imageUrl     String? @db.Text
+So your full User model should look like this:
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  displayName  String?
+  imageUrl     String?          @db.Text
+  passwordHash String?
+  role         UserRole         @default(USER)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  submissions  PickSubmission[]
+}
+Then run:
+
+npx prisma migrate dev --name add_user_profile_fields
+npx prisma generate
+2. Update auth.ts
+Find this part inside authorize:
+
+return {
+  id: user.id,
+  email: user.email,
+  name: user.username,
+  username: user.username,
+  role: user.role,
+};
+Replace it with:
+
+return {
+  id: user.id,
+  email: user.email,
+  name: user.displayName || user.username,
+  image: user.imageUrl,
+  username: user.username,
+  role: user.role,
+};
+3. Create app/account/page.tsx
+// app/account/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import Navbar from "@/components/Navbar";
+import AccountForm from "./AccountForm";
+
+export const dynamic = "force-dynamic";
+
+export default async function AccountPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: session.user.id,
+    },
+    select: {
+      email: true,
+      username: true,
+      displayName: true,
+      imageUrl: true,
+    },
+  });
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-3xl rounded-3xl bg-white p-8 shadow-sm">
+          <div className="mb-10">
+            <h1 className="text-3xl font-black tracking-tight">Account</h1>
+            <p className="mt-2 text-sm font-semibold text-neutral-500">
+              Change your display name and profile picture.
+            </p>
+          </div>
+
+          <AccountForm user={user} />
+        </section>
+      </main>
+    </>
+  );
+}
+4. Create app/account/AccountForm.tsx
+// app/account/AccountForm.tsx
+"use client";
+
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type AccountUser = {
+  email: string;
+  username: string;
+  displayName: string | null;
+  imageUrl: string | null;
+};
+
+type Props = {
+  user: AccountUser;
+};
+
+export default function AccountForm({ user }: Props) {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [displayName, setDisplayName] = useState(
+    user.displayName || user.username,
+  );
+
+  const [imageUrl, setImageUrl] = useState(user.imageUrl || "");
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const compressedImage = await compressImageToDataUrl(file);
+      setImageUrl(compressedImage);
+    } catch (error) {
+      console.error(error);
+      setError("Could not use that image. Try a smaller JPG, PNG, or WEBP.");
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/account/profile", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          displayName,
+          imageUrl,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Failed to save account.");
+        return;
+      }
+
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setError("Failed to save account.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const shownName = displayName.trim() || user.username;
+  const initials = getInitials(shownName);
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {error && (
+        <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col items-center gap-4">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="group relative h-40 w-40 overflow-hidden rounded-full bg-neutral-200 shadow-inner"
+          aria-label="Change profile picture"
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={shownName}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-5xl font-black text-neutral-500">
+              {initials}
+            </div>
+          )}
+
+          <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-100 transition group-hover:bg-black/45">
+            <div className="rounded-2xl border-2 border-white px-4 py-3 text-4xl text-white">
+              📷
+            </div>
+          </div>
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={handleImageChange}
+          className="hidden"
+        />
+
+        {imageUrl && (
+          <button
+            type="button"
+            onClick={() => setImageUrl("")}
+            className="text-sm font-bold text-neutral-500 transition hover:text-red-600"
+          >
+            Remove picture
+          </button>
+        )}
+      </div>
+
+      <div className="mx-auto max-w-md space-y-2">
+        <label
+          htmlFor="displayName"
+          className="text-sm font-black text-neutral-700"
+        >
+          Display name
+        </label>
+
+        <input
+          id="displayName"
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          minLength={1}
+          maxLength={30}
+          className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-center font-bold outline-none transition focus:border-blue-500 focus:bg-white"
+        />
+
+        <p className="text-center text-xs font-semibold text-neutral-400">
+          Login username: @{user.username}
+        </p>
+      </div>
+
+      <div className="flex justify-center">
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="rounded-2xl bg-blue-600 px-8 py-3 font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-400"
+        >
+          {isSaving ? "Saving..." : "Save changes"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return "?";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function compressImageToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("File is not an image."));
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const size = 512;
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        if (!context) {
+          reject(new Error("Could not create canvas context."));
+          return;
+        }
+
+        canvas.width = size;
+        canvas.height = size;
+
+        const sourceSize = Math.min(image.width, image.height);
+        const sourceX = (image.width - sourceSize) / 2;
+        const sourceY = (image.height - sourceSize) / 2;
+
+        context.drawImage(
+          image,
+          sourceX,
+          sourceY,
+          sourceSize,
+          sourceSize,
+          0,
+          0,
+          size,
+          size,
+        );
+
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+
+        if (dataUrl.length > 750_000) {
+          reject(new Error("Image is too large."));
+          return;
+        }
+
+        resolve(dataUrl);
+      };
+
+      image.onerror = () => {
+        reject(new Error("Could not load image."));
+      };
+
+      image.src = String(reader.result);
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Could not read file."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+5. Create app/api/account/profile/route.ts
+// app/api/account/profile/route.ts
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const profileSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Display name is required.")
+    .max(30, "Display name must be 30 characters or fewer."),
+  imageUrl: z
+    .string()
+    .max(750_000, "Image is too large.")
+    .refine(
+      (value) =>
+        value === "" ||
+        value.startsWith("data:image/") ||
+        value.startsWith("https://") ||
+        value.startsWith("http://"),
+      "Invalid image.",
+    ),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          error: "You must be logged in.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
+
+    const body = await request.json();
+    const parsed = profileSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: parsed.error.issues[0]?.message || "Invalid profile data.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { displayName, imageUrl } = parsed.data;
+
+    const user = await prisma.user.update({
+      where: {
+        id: session.user.id,
+      },
+      data: {
+        displayName,
+        imageUrl: imageUrl || null,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        displayName: true,
+        imageUrl: true,
+      },
+    });
+
+    return NextResponse.json({
+      user,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to update profile.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+6. Update components/Navbar.tsx
+This version shows the current user’s profile picture and display name.
+
+// components/Navbar.tsx
+import { signOut } from "@/auth";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export default async function Navbar() {
+  const session = await auth();
+
+  const currentUser = session?.user?.id
+    ? await prisma.user.findUnique({
+        where: {
+          id: session.user.id,
+        },
+        select: {
+          username: true,
+          displayName: true,
+          imageUrl: true,
+        },
+      })
+    : null;
+
+  const shownName =
+    currentUser?.displayName ||
+    currentUser?.username ||
+    session?.user?.name ||
+    "Account";
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur">
+      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <a
+          href="/picks"
+          className="text-2xl font-black italic tracking-tight text-neutral-800"
+        >
+          Pick Fights
+        </a>
+
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 md:flex">
+          <a
+            href="/picks"
+            className="text-lg font-[1000] text-neutral-700 transition hover:text-neutral-800"
+          >
+            Make picks
+          </a>
+
+          <a
+            href="/leaderboard"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Leaderboard
+          </a>
+
+          <a
+            href="/account"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Account
+          </a>
+
+          {session?.user?.role === "ADMIN" && (
+            <a
+              href="/admin"
+              className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            >
+              Admin
+            </a>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {session?.user ? (
+            <>
+              <a
+                href="/account"
+                className="hidden items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition hover:bg-neutral-200 sm:flex"
+              >
+                <Avatar imageUrl={currentUser?.imageUrl} name={shownName} />
+
+                <span className="text-sm font-bold text-neutral-700">
+                  {shownName}
+                </span>
+              </a>
+
+              <form
+                action={async () => {
+                  "use server";
+
+                  await signOut({
+                    redirectTo: "/login",
+                  });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-neutral-700"
+                >
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <a
+                href="/login"
+                className="text-sm font-bold text-neutral-700 transition hover:text-neutral-900"
+              >
+                Log in
+              </a>
+
+              <a
+                href="/signup"
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                Sign up
+              </a>
+            </>
+          )}
+        </div>
+      </nav>
+    </header>
+  );
+}
+
+function Avatar({
+  imageUrl,
+  name,
+}: {
+  imageUrl: string | null | undefined;
+  name: string;
+}) {
+  if (imageUrl) {
+    return (
+      <span className="h-8 w-8 overflow-hidden rounded-full bg-neutral-200">
+        <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-300 text-xs font-black text-neutral-700">
+      {getInitials(name)}
+    </span>
+  );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return "?";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+7. Run and test
+npx prisma generate
+npm run dev
+Go to:
+
+http://localhost:3000/account
+Test:
+
+change display name
+upload profile pic
+save
+refresh page
+check navbar name/avatar changed
+
+Naložena slika
+
+Thought for a few seconds
+This error means Prisma does not know about displayName / imageUrl yet.
+
+You updated Navbar.tsx to read:
+
+select: {
+  username: true,
+  displayName: true,
+  imageUrl: true,
+}
+…but your Prisma schema/database/client are not updated yet.
+
+Fix
+First, make sure your User model in prisma/schema.prisma has these fields:
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  displayName  String?
+  imageUrl     String?          @db.Text
+  passwordHash String?
+  role         UserRole         @default(USER)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  submissions  PickSubmission[]
+}
+Then stop the dev server with Ctrl + C.
+
+Run:
+
+npx prisma migrate dev --name add_user_profile_fields
+npx prisma generate
+npm run dev
+If VS Code still shows red squiggles after that:
+
+Cmd + Shift + P
+TypeScript: Restart TS Server
+Then refresh /account.
+
+Quick temporary fix
+Until the migration is done, change your Navbar select back to only:
+
+select: {
+  username: true,
+}
+But the real fix is running the migration above.
+
+
+Naložena slika
+
+Thought for 7s
+That is still the same root problem: your app code is asking Prisma for displayName / imageUrl, but your actual Prisma DB/client is not fully updated yet.
+
+Do this exactly.
+
+1. Stop dev server
+Press:
+
+Ctrl + C
+2. Confirm User model has these fields
+In prisma/schema.prisma, your User model must include:
+
+model User {
+  id           String           @id @default(cuid())
+  email        String           @unique
+  username     String           @unique
+  displayName  String?
+  imageUrl     String?          @db.Text
+  passwordHash String?
+  role         UserRole         @default(USER)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @default(now()) @updatedAt
+  submissions  PickSubmission[]
+}
+3. Run the migration
+npx prisma migrate dev --name add_user_profile_fields
+npx prisma generate
+4. Hard restart Next
+rm -rf .next
+npm run dev
+Then open:
+
+/account
+If migration gives you trouble
+Run this instead:
+
+npx prisma db push
+npx prisma generate
+rm -rf .next
+npm run dev
+db push directly syncs the Neon database to your schema without creating a migration file.
+
+If it still errors
+Open Prisma Studio:
+
+npx prisma studio
+Go to User.
+
+You should see columns:
+
+displayName
+imageUrl
+If those columns are not there, the database did not update yet.
+
+
+works ... what kind of pictures can i put in?
+
+Right now the account page accepts:
+
+PNG
+JPG / JPEG
+WEBP
+This line controls it:
+
+accept="image/png,image/jpeg,image/webp"
+It then crops the image to a square, compresses it to a 512×512 JPEG, and saves it as a data URL in your database.
+
+A few notes:
+
+Best choice: normal JPG or PNG selfie/avatar
+Also works: WEBP
+Not supported: GIF animation, HEIC from iPhone, SVG
+Size limit after compression: about 750 KB
+For iPhone photos, if a .HEIC image fails, export/share it as JPG first.
+
+
+ok its all good i added the picture but i would like to make it shown in the navbar thing 
+
+Thought for 8s
+Yep — replace components/Navbar.tsx with this. It pulls your saved imageUrl from the database and shows it next to your name in the navbar.
+
+// components/Navbar.tsx
+import { signOut } from "@/auth";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export default async function Navbar() {
+  const session = await auth();
+
+  const currentUser = session?.user?.id
+    ? await prisma.user.findUnique({
+        where: {
+          id: session.user.id,
+        },
+        select: {
+          username: true,
+          displayName: true,
+          imageUrl: true,
+        },
+      })
+    : null;
+
+  const shownName =
+    currentUser?.displayName ||
+    currentUser?.username ||
+    session?.user?.name ||
+    "Account";
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur">
+      <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+        <a
+          href="/picks"
+          className="text-2xl font-black italic tracking-tight text-neutral-800"
+        >
+          Pick Fights
+        </a>
+
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 md:flex">
+          <a
+            href="/picks"
+            className="text-lg font-[1000] text-neutral-700 transition hover:text-neutral-800"
+          >
+            Make picks
+          </a>
+
+          <a
+            href="/leaderboard"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Leaderboard
+          </a>
+
+          <a
+            href="/account"
+            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Account
+          </a>
+
+          {session?.user?.role === "ADMIN" && (
+            <a
+              href="/admin"
+              className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            >
+              Admin
+            </a>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4">
+          {session?.user ? (
+            <>
+              <a
+                href="/account"
+                className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1.5 transition hover:bg-neutral-200"
+              >
+                <Avatar imageUrl={currentUser?.imageUrl} name={shownName} />
+
+                <span className="hidden text-sm font-bold text-neutral-700 sm:inline">
+                  {shownName}
+                </span>
+              </a>
+
+              <form
+                action={async () => {
+                  "use server";
+
+                  await signOut({
+                    redirectTo: "/login",
+                  });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="rounded-xl bg-neutral-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-neutral-700"
+                >
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <a
+                href="/login"
+                className="text-sm font-bold text-neutral-700 transition hover:text-neutral-900"
+              >
+                Log in
+              </a>
+
+              <a
+                href="/signup"
+                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
+              >
+                Sign up
+              </a>
+            </>
+          )}
+        </div>
+      </nav>
+    </header>
+  );
+}
+
+function Avatar({
+  imageUrl,
+  name,
+}: {
+  imageUrl: string | null | undefined;
+  name: string;
+}) {
+  if (imageUrl) {
+    return (
+      <span className="h-8 w-8 overflow-hidden rounded-full bg-neutral-200">
+        <img
+          src={imageUrl}
+          alt={name}
+          className="h-full w-full object-cover"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-300 text-xs font-black text-neutral-700">
+      {getInitials(name)}
+    </span>
+  );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return "?";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+Then refresh the page.
+
+If it still does not show, restart dev:
+
+npm run dev
+And confirm in Prisma Studio that your user has imageUrl filled in.
+
+
+ok now only leaderboard remains ... /leaderboard is a leaderboard page with a toggle (this event/ alltime) where you can switch between points for this event and for all time the columns are position player (picture and name) correct (numcorrect / all picked) correct_percentage and points (count)
+
+Thought for 17s
+Yep. Let’s build /leaderboard.
+
+This version gives you:
+
+/leaderboard?scope=event    → this event
+/leaderboard?scope=alltime  → all time
+Columns:
+
+Position
+Player picture + name
+Correct numCorrect / allPicked
+Correct %
+Points
+Scoring:
+
+Correct WINNER pick = 100 points
+Wrong pick = 0
+DRAW / NO_CONTEST / CANCELLED / PENDING = 0
+1. Create/replace app/leaderboard/page.tsx
+// app/leaderboard/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import Navbar from "@/components/Navbar";
+
+export const dynamic = "force-dynamic";
+
+type Scope = "event" | "alltime";
+
+type LeaderboardRow = {
+  userId: string;
+  position: number;
+  name: string;
+  username: string;
+  imageUrl: string | null;
+  correct: number;
+  totalPicked: number;
+  correctPercentage: number;
+  points: number;
+};
+
+type PageProps = {
+  searchParams?: Promise<{
+    scope?: string;
+  }>;
+};
+
+export default async function LeaderboardPage({ searchParams }: PageProps) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  const params = await searchParams;
+  const scope: Scope = params?.scope === "alltime" ? "alltime" : "event";
+
+  const activeEvent = await prisma.event.findFirst({
+    where: {
+      isActive: true,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  const rows =
+    scope === "event"
+      ? activeEvent
+        ? await getLeaderboardRows({
+            scope,
+            eventId: activeEvent.id,
+          })
+        : []
+      : await getLeaderboardRows({
+          scope,
+        });
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-6xl">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h1 className="text-4xl font-black tracking-tight">
+                  Leaderboard
+                </h1>
+
+                <p className="mt-2 text-sm font-semibold text-neutral-500">
+                  {scope === "event"
+                    ? activeEvent
+                      ? `Current event: ${activeEvent.name}`
+                      : "No active event selected."
+                    : "All-time points across every event."}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 rounded-2xl bg-neutral-100 p-1">
+                <a
+                  href="/leaderboard?scope=event"
+                  className={`rounded-xl px-5 py-3 text-center text-sm font-black transition ${
+                    scope === "event"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  This event
+                </a>
+
+                <a
+                  href="/leaderboard?scope=alltime"
+                  className={`rounded-xl px-5 py-3 text-center text-sm font-black transition ${
+                    scope === "alltime"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-800"
+                  }`}
+                >
+                  All time
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <LeaderboardTable rows={rows} />
+
+          {rows.length === 0 && (
+            <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
+              <h2 className="text-2xl font-black">No leaderboard yet.</h2>
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Once people submit picks, they will show up here.
+              </p>
+            </div>
+          )}
+        </section>
+      </main>
+    </>
+  );
+}
+
+async function getLeaderboardRows({
+  scope,
+  eventId,
+}: {
+  scope: Scope;
+  eventId?: string;
+}): Promise<LeaderboardRow[]> {
+  const submissions = await prisma.pickSubmission.findMany({
+    where:
+      scope === "event" && eventId
+        ? {
+            eventId,
+          }
+        : undefined,
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          imageUrl: true,
+        },
+      },
+      choices: {
+        include: {
+          fight: {
+            include: {
+              result: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const rowsByUser = new Map<string, Omit<LeaderboardRow, "position">>();
+
+  for (const submission of submissions) {
+    const user = submission.user;
+
+    const existing = rowsByUser.get(user.id) || {
+      userId: user.id,
+      name: user.displayName || user.username,
+      username: user.username,
+      imageUrl: user.imageUrl,
+      correct: 0,
+      totalPicked: 0,
+      correctPercentage: 0,
+      points: 0,
+    };
+
+    for (const choice of submission.choices) {
+      existing.totalPicked += 1;
+
+      const result = choice.fight.result;
+
+      const isCorrect =
+        result?.status === "WINNER" &&
+        result.winnerFighterId === choice.pickedFighterId;
+
+      if (isCorrect) {
+        existing.correct += 1;
+        existing.points += 100;
+      }
+    }
+
+    existing.correctPercentage =
+      existing.totalPicked === 0
+        ? 0
+        : Math.round((existing.correct / existing.totalPicked) * 1000) / 10;
+
+    rowsByUser.set(user.id, existing);
+  }
+
+  const sortedRows = Array.from(rowsByUser.values()).sort((a, b) => {
+    if (b.points !== a.points) return b.points - a.points;
+    if (b.correct !== a.correct) return b.correct - a.correct;
+    if (b.correctPercentage !== a.correctPercentage) {
+      return b.correctPercentage - a.correctPercentage;
+    }
+
+    return a.name.localeCompare(b.name);
+  });
+
+  return sortedRows.map((row, index) => ({
+    ...row,
+    position: index + 1,
+  }));
+}
+
+function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] border-collapse">
+          <thead>
+            <tr className="border-b border-neutral-100 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-400">
+              <th className="w-24 px-6 py-4 font-black">Position</th>
+              <th className="px-6 py-4 font-black">Player</th>
+              <th className="px-6 py-4 text-center font-black">Correct</th>
+              <th className="px-6 py-4 text-center font-black">Correct %</th>
+              <th className="px-6 py-4 text-right font-black">Points</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.userId}
+                className="border-b border-neutral-100 last:border-b-0"
+              >
+                <td className="px-6 py-5">
+                  <PositionBadge position={row.position} />
+                </td>
+
+                <td className="px-6 py-5">
+                  <div className="flex items-center gap-4">
+                    <Avatar imageUrl={row.imageUrl} name={row.name} />
+
+                    <div>
+                      <div className="text-lg font-black text-neutral-800">
+                        {row.name}
+                      </div>
+
+                      <div className="text-sm font-semibold text-neutral-400">
+                        @{row.username}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                <td className="px-6 py-5 text-center">
+                  <span className="text-lg font-black text-neutral-800">
+                    {row.correct}
+                  </span>
+
+                  <span className="text-sm font-bold text-neutral-400">
+                    {" "}
+                    / {row.totalPicked}
+                  </span>
+                </td>
+
+                <td className="px-6 py-5 text-center">
+                  <span className="rounded-full bg-neutral-100 px-4 py-2 text-sm font-black text-neutral-700">
+                    {row.correctPercentage}%
+                  </span>
+                </td>
+
+                <td className="px-6 py-5 text-right">
+                  <span className="text-2xl font-black text-blue-600">
+                    {row.points}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PositionBadge({ position }: { position: number }) {
+  const label =
+    position === 1
+      ? "🥇"
+      : position === 2
+        ? "🥈"
+        : position === 3
+          ? "🥉"
+          : `#${position}`;
+
+  return (
+    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-lg font-black text-neutral-700">
+      {label}
+    </div>
+  );
+}
+
+function Avatar({
+  imageUrl,
+  name,
+}: {
+  imageUrl: string | null;
+  name: string;
+}) {
+  if (imageUrl) {
+    return (
+      <span className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-neutral-200">
+        <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-neutral-300 text-base font-black text-neutral-700">
+      {getInitials(name)}
+    </span>
+  );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) {
+    return "?";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+2. Make sure your navbar points to it
+You should already have this in Navbar.tsx:
+
+<a
+  href="/leaderboard"
+  className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+>
+  Leaderboard
+</a>
+That is good. /leaderboard defaults to this event.
+
+3. Test it
+Run:
+
+npm run dev
+Open:
+
+/leaderboard
+Then test the toggle:
+
+/leaderboard?scope=event
+/leaderboard?scope=alltime
+Right now, if you have not entered results yet, everyone will probably show:
+
+0 correct
+0%
+0 points
+That is expected. Once we build /admin/results and mark winners, the leaderboard will start scoring automatically.
+
+
+now lets make admin page for inputing fight results
+
+Thought for 22s
+Yep — now we’ll make /admin where you can enter results for the active event.
+
+This will support:
+
+Winner: Fighter A
+Winner: Fighter B
+Draw
+No contest
+Cancelled / fight did not happen
+Pending
+And it will save into FightResult.
+
+1. Create app/admin/page.tsx
+// app/admin/page.tsx
+import { redirect } from "next/navigation";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import Navbar from "@/components/Navbar";
+import AdminResultsForm from "./AdminResultsForm";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminPage() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  if (session.user.role !== "ADMIN") {
+    redirect("/picks");
+  }
+
+  const event = await prisma.event.findFirst({
+    where: {
+      isActive: true,
+    },
+    include: {
+      fights: {
+        include: {
+          fighterA: {
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+              record: true,
+            },
+          },
+          fighterB: {
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+              record: true,
+            },
+          },
+          result: {
+            select: {
+              status: true,
+              winnerFighterId: true,
+              method: true,
+              round: true,
+            },
+          },
+        },
+        orderBy: {
+          order: "asc",
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    return (
+      <>
+        <Navbar />
+
+        <main className="min-h-screen bg-zinc-100 p-6 text-black">
+          <section className="mx-auto max-w-5xl rounded-3xl bg-white p-8 shadow-sm">
+            <h1 className="text-3xl font-black">Admin</h1>
+            <p className="mt-2 text-neutral-500">
+              No active event found. Mark an event as active first.
+            </p>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  const adminEvent = {
+    id: event.id,
+    name: event.name,
+    status: event.status,
+    fights: event.fights.map((fight) => ({
+      id: fight.id,
+      order: fight.order,
+      fighterA: fight.fighterA,
+      fighterB: fight.fighterB,
+      result: fight.result,
+    })),
+  };
+
+  return (
+    <>
+      <Navbar />
+
+      <main className="min-h-screen bg-zinc-100 p-6 text-black">
+        <section className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
+            <h1 className="text-4xl font-black tracking-tight">Admin</h1>
+
+            <p className="mt-2 text-sm font-semibold text-neutral-500">
+              Input fight results for {event.name}.
+            </p>
+          </div>
+
+          <AdminResultsForm event={adminEvent} />
+        </section>
+      </main>
+    </>
+  );
+}
+2. Create app/admin/AdminResultsForm.tsx
+// app/admin/AdminResultsForm.tsx
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+type FightResultStatus =
+  | "PENDING"
+  | "WINNER"
+  | "DRAW"
+  | "NO_CONTEST"
+  | "CANCELLED";
+
+type FightMethod = "KO_TKO" | "SUBMISSION" | "DECISION";
+
+type Fighter = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  record: string | null;
+};
+
+type AdminFight = {
+  id: string;
+  order: number;
+  fighterA: Fighter;
+  fighterB: Fighter;
+  result: {
+    status: FightResultStatus;
+    winnerFighterId: string | null;
+    method: FightMethod | null;
+    round: number | null;
+  } | null;
+};
+
+type AdminEvent = {
+  id: string;
+  name: string;
+  status: string;
+  fights: AdminFight[];
+};
+
+type ResultDraft = {
+  fightId: string;
+  status: FightResultStatus;
+  winnerFighterId: string | null;
+  method: FightMethod | null;
+  round: number | null;
+};
+
+type Props = {
+  event: AdminEvent;
+};
+
+export default function AdminResultsForm({ event }: Props) {
+  const router = useRouter();
+
+  const [results, setResults] = useState<Record<string, ResultDraft>>(() => {
+    const initialResults: Record<string, ResultDraft> = {};
+
+    for (const fight of event.fights) {
+      initialResults[fight.id] = {
+        fightId: fight.id,
+        status: fight.result?.status || "PENDING",
+        winnerFighterId: fight.result?.winnerFighterId || null,
+        method: fight.result?.method || null,
+        round: fight.result?.round || null,
+      };
+    }
+
+    return initialResults;
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [markCompleted, setMarkCompleted] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  function updateFightResult(fightId: string, resultValue: string) {
+    setResults((current) => {
+      const currentResult = current[fightId];
+
+      if (resultValue.startsWith("WINNER:")) {
+        const winnerFighterId = resultValue.replace("WINNER:", "");
+
+        return {
+          ...current,
+          [fightId]: {
+            ...currentResult,
+            status: "WINNER",
+            winnerFighterId,
+          },
+        };
+      }
+
+      return {
+        ...current,
+        [fightId]: {
+          ...currentResult,
+          status: resultValue as FightResultStatus,
+          winnerFighterId: null,
+          method: null,
+          round: null,
+        },
+      };
+    });
+  }
+
+  function updateMethod(fightId: string, method: string) {
+    setResults((current) => ({
+      ...current,
+      [fightId]: {
+        ...current[fightId],
+        method: method ? (method as FightMethod) : null,
+      },
+    }));
+  }
+
+  function updateRound(fightId: string, round: string) {
+    setResults((current) => ({
+      ...current,
+      [fightId]: {
+        ...current[fightId],
+        round: round ? Number(round) : null,
+      },
+    }));
+  }
+
+  async function saveResults() {
+    setIsSaving(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/admin/results", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          eventId: event.id,
+          markCompleted,
+          results: Object.values(results),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setMessage(data.error || "Failed to save results.");
+        return;
+      }
+
+      setMessage("Results saved.");
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      setMessage("Failed to save results.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const finishedCount = Object.values(results).filter(
+    (result) => result.status !== "PENDING",
+  ).length;
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-3xl bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-2xl font-black">Fight results</h2>
+
+            <p className="mt-1 text-sm font-semibold text-neutral-500">
+              {finishedCount} / {event.fights.length} fights have results.
+            </p>
+          </div>
+
+          <label className="flex items-center gap-3 rounded-2xl bg-neutral-100 px-4 py-3 text-sm font-bold text-neutral-700">
+            <input
+              type="checkbox"
+              checked={markCompleted}
+              onChange={(event) => setMarkCompleted(event.target.checked)}
+              className="h-4 w-4"
+            />
+            Mark event completed
+          </label>
+        </div>
+
+        {message && (
+          <div className="mt-5 rounded-2xl bg-neutral-100 px-4 py-3 text-sm font-bold text-neutral-700">
+            {message}
+          </div>
+        )}
+      </div>
+
+      {event.fights.map((fight) => {
+        const result = results[fight.id];
+        const selectedValue =
+          result.status === "WINNER" && result.winnerFighterId
+            ? `WINNER:${result.winnerFighterId}`
+            : result.status;
+
+        return (
+          <div
+            key={fight.id}
+            className="overflow-hidden rounded-3xl bg-white shadow-sm"
+          >
+            <div className="border-b border-neutral-100 bg-neutral-50 px-6 py-4">
+              <div className="text-xs font-black uppercase tracking-widest text-neutral-400">
+                Fight {fight.order}
+              </div>
+
+              <div className="mt-1 text-xl font-black text-neutral-800">
+                {fight.fighterA.name} vs {fight.fighterB.name}
+              </div>
+            </div>
+
+            <div className="grid gap-6 p-6 md:grid-cols-[1fr_auto_1fr] md:items-center">
+              <FighterPreview fighter={fight.fighterA} align="left" />
+
+              <div className="text-center text-sm font-black text-neutral-300">
+                VS
+              </div>
+
+              <FighterPreview fighter={fight.fighterB} align="right" />
+            </div>
+
+            <div className="grid gap-4 border-t border-neutral-100 p-6 md:grid-cols-3">
+              <label className="space-y-2">
+                <span className="text-sm font-black text-neutral-700">
+                  Result
+                </span>
+
+                <select
+                  value={selectedValue}
+                  onChange={(event) =>
+                    updateFightResult(fight.id, event.target.value)
+                  }
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+                >
+                  <option value="PENDING">Pending</option>
+                  <option value={`WINNER:${fight.fighterA.id}`}>
+                    {fight.fighterA.name} won
+                  </option>
+                  <option value={`WINNER:${fight.fighterB.id}`}>
+                    {fight.fighterB.name} won
+                  </option>
+                  <option value="DRAW">Draw</option>
+                  <option value="NO_CONTEST">No contest</option>
+                  <option value="CANCELLED">
+                    Cancelled / did not happen
+                  </option>
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-black text-neutral-700">
+                  Method
+                </span>
+
+                <select
+                  value={result.method || ""}
+                  onChange={(event) => updateMethod(fight.id, event.target.value)}
+                  disabled={result.status !== "WINNER"}
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-bold outline-none disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 focus:border-blue-500"
+                >
+                  <option value="">Optional</option>
+                  <option value="KO_TKO">KO / TKO</option>
+                  <option value="SUBMISSION">Submission</option>
+                  <option value="DECISION">Decision</option>
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-black text-neutral-700">
+                  Round
+                </span>
+
+                <select
+                  value={result.round || ""}
+                  onChange={(event) => updateRound(fight.id, event.target.value)}
+                  disabled={result.status !== "WINNER"}
+                  className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-bold outline-none disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400 focus:border-blue-500"
+                >
+                  <option value="">Optional</option>
+                  <option value="1">Round 1</option>
+                  <option value="2">Round 2</option>
+                  <option value="3">Round 3</option>
+                  <option value="4">Round 4</option>
+                  <option value="5">Round 5</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        );
+      })}
+
+      <div className="sticky bottom-6 z-40 flex justify-center">
+        <button
+          type="button"
+          onClick={saveResults}
+          disabled={isSaving}
+          className="rounded-2xl bg-blue-600 px-8 py-4 font-black text-white shadow-lg transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-neutral-400"
+        >
+          {isSaving ? "Saving..." : "Save results"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FighterPreview({
+  fighter,
+  align,
+}: {
+  fighter: Fighter;
+  align: "left" | "right";
+}) {
+  const isRight = align === "right";
+
+  return (
+    <div
+      className={`flex items-center gap-4 ${
+        isRight ? "justify-end text-right" : "text-left"
+      }`}
+    >
+      {!isRight && <FighterImage fighter={fighter} />}
+
+      <div>
+        <div className="text-lg font-black text-neutral-800">
+          {fighter.name}
+        </div>
+
+        <div className="text-sm font-semibold text-neutral-400">
+          {fighter.record || "Record unavailable"}
+        </div>
+      </div>
+
+      {isRight && <FighterImage fighter={fighter} />}
+    </div>
+  );
+}
+
+function FighterImage({ fighter }: { fighter: Fighter }) {
+  return (
+    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-neutral-100">
+      <img
+        src={fighter.imageUrl || "/fighter-placeholder.png"}
+        alt={fighter.name}
+        className="h-full w-full object-cover object-top"
+      />
+    </div>
+  );
+}
+
+3. Create app/api/admin/results/route.ts
+// app/api/admin/results/route.ts
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+const fightResultStatusSchema = z.enum([
+  "PENDING",
+  "WINNER",
+  "DRAW",
+  "NO_CONTEST",
+  "CANCELLED",
+]);
+
+const fightMethodSchema = z.enum(["KO_TKO", "SUBMISSION", "DECISION"]);
+
+const resultSchema = z.object({
+  fightId: z.string().min(1),
+  status: fightResultStatusSchema,
+  winnerFighterId: z.string().nullable(),
+  method: fightMethodSchema.nullable(),
+  round: z.number().int().min(1).max(5).nullable(),
+});
+
+const updateResultsSchema = z.object({
+  eventId: z.string().min(1),
+  markCompleted: z.boolean().optional().default(false),
+  results: z.array(resultSchema).min(1),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          error: "You must be logged in.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
+
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json(
+        {
+          error: "You are not allowed to update results.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
+
+    const body = await request.json();
+    const parsed = updateResultsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: parsed.error.issues[0]?.message || "Invalid result data.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const { eventId, results, markCompleted } = parsed.data;
+
+    const event = await prisma.event.findUnique({
+      where: {
+        id: eventId,
+      },
+      select: {
+        id: true,
+        fights: {
+          select: {
+            id: true,
+            fighterAId: true,
+            fighterBId: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return NextResponse.json(
+        {
+          error: "Event not found.",
+        },
+        {
+          status: 404,
+        },
+      );
+    }
+
+    const fightsById = new Map(
+      event.fights.map((fight) => {
+        return [fight.id, fight];
+      }),
+    );
+
+    for (const result of results) {
+      const fight = fightsById.get(result.fightId);
+
+      if (!fight) {
+        return NextResponse.json(
+          {
+            error: "One of the results is for a fight outside this event.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
+      if (result.status === "WINNER") {
+        const winnerIsInFight =
+          result.winnerFighterId === fight.fighterAId ||
+          result.winnerFighterId === fight.fighterBId;
+
+        if (!result.winnerFighterId || !winnerIsInFight) {
+          return NextResponse.json(
+            {
+              error: "Winner must be one of the fighters in the fight.",
+            },
+            {
+              status: 400,
+            },
+          );
+        }
+      }
+
+      if (result.status !== "WINNER" && result.winnerFighterId) {
+        return NextResponse.json(
+          {
+            error: "Only winner results can have a winner.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+    }
+
+    await prisma.$transaction([
+      ...results.map((result) => {
+        const isWinner = result.status === "WINNER";
+
+        return prisma.fightResult.upsert({
+          where: {
+            fightId: result.fightId,
+          },
+          create: {
+            fightId: result.fightId,
+            status: result.status,
+            winnerFighterId: isWinner ? result.winnerFighterId : null,
+            method: isWinner ? result.method : null,
+            round: isWinner ? result.round : null,
+          },
+          update: {
+            status: result.status,
+            winnerFighterId: isWinner ? result.winnerFighterId : null,
+            method: isWinner ? result.method : null,
+            round: isWinner ? result.round : null,
+          },
+        });
+      }),
+
+      ...(markCompleted
+        ? [
+            prisma.event.update({
+              where: {
+                id: eventId,
+              },
+              data: {
+                status: "COMPLETED",
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to update results.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+4. Make sure your user is admin
+In Prisma Studio, open User and set your account:
+
+role = ADMIN
+Or use SQL:
+
+UPDATE "User"
+SET "role" = 'ADMIN'
+WHERE "email" = 'your-email@example.com';
+5. Test
+Open:
+
+/admin
+Pick results, click Save results, then go to:
+
+/leaderboard
+The leaderboard should update automatically.
+
+One important thing: if you check Mark event completed, your /picks page will become locked because event status changes from OPEN to COMPLETED. That is probably what you want after results are final.
+
+
+if i try go to /admin i get forwared to /picks
+
+Thought for 6s
+That means your logged-in session still thinks your user is:
+
+role = USER
+Most likely you changed yourself to ADMIN in Prisma Studio after logging in, so the JWT session still has the old role.
+
+Quick fix first
+Go to Prisma Studio.
+
+Open User.
+
+Make sure your account has:
+
+role = ADMIN
+Log out.
+
+Log back in.
+
+Try:
+
+/admin
+That will probably fix it.
+
+Better fix: check admin role from database
+This avoids stale session role problems.
+
+Replace the top part of app/admin/page.tsx.
+
+Change this:
+
+const session = await auth();
+
+if (!session?.user?.id) {
+  redirect("/login");
+}
+
+if (session.user.role !== "ADMIN") {
+  redirect("/picks");
+}
+to this:
+
+const session = await auth();
+
+if (!session?.user?.id) {
+  redirect("/login");
+}
+
+const currentUser = await prisma.user.findUnique({
+  where: {
+    id: session.user.id,
+  },
+  select: {
+    role: true,
+  },
+});
+
+if (currentUser?.role !== "ADMIN") {
+  redirect("/picks");
+}
+Now /admin checks your real database role, not the possibly stale login token.
+
+Also update the admin API
+In app/api/admin/results/route.ts, change this:
+
+if (session.user.role !== "ADMIN") {
+  return NextResponse.json(
+    {
+      error: "You are not allowed to update results.",
+    },
+    {
+      status: 403,
+    },
+  );
+}
+to this:
+
+const currentUser = await prisma.user.findUnique({
+  where: {
+    id: session.user.id,
+  },
+  select: {
+    role: true,
+  },
+});
+
+if (currentUser?.role !== "ADMIN") {
+  return NextResponse.json(
+    {
+      error: "You are not allowed to update results.",
+    },
+    {
+      status: 403,
+    },
+  );
+}
+Check one more thing
+If you still have middleware.ts or proxy.ts, delete it for now:
+
+rm -f middleware.ts proxy.ts
+Then restart:
+
+npm run dev
+Most likely the only thing you need is: set role to ADMIN, then log out and log back in.
+
+
+ok works.... now what should i do before putting this on github and somehow putting it on the web?
+
+Thought for 10s
+Before GitHub/deploy, I’d do this checklist in order.
+
+1. Clean up secrets before GitHub
+Make sure these are not committed:
+
+.env
+.env.local
+DATABASE_URL
+AUTH_SECRET
+INVITE_CODE
+Your .gitignore should include:
+
+.env
+.env.*
+!.env.example
+.next
+node_modules
+Then create a safe .env.example:
+
+DATABASE_URL=""
+AUTH_SECRET=""
+INVITE_CODE=""
+AUTH_TRUST_HOST=true
+If you ever accidentally committed .env, don’t just delete it in a new commit. GitHub warns that sensitive data can remain in repository history unless you rewrite history and rotate the exposed secrets. 
+
+2. Make sure the app builds locally
+Run:
+
+npm run lint
+npm run build
+If you do not have lint configured, at least run:
+
+npx tsc --noEmit
+npm run build
+Fix every TypeScript/build error before deploy.
+
+3. Add production scripts
+In package.json, make sure you have something like:
+
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  }
+}
+For production, use prisma migrate deploy, not prisma migrate dev. Prisma documents migrate deploy as the production/staging command for applying pending migrations. 
+
+4. Decide your first hosting setup
+For this app, easiest stack:
+
+GitHub repo
+Vercel for Next.js hosting
+Neon for Postgres
+Vercel is built for Next.js and has project environment variables for secrets; Vercel stores env vars outside your code and encrypts them at rest. 
+
+5. Prepare Neon for production
+You have two choices:
+
+Option A: Use your current Neon DB
+Fastest, but your dev testing data goes live.
+
+Option B: Create a new Neon branch/database for production
+Cleaner. Recommended.
+
+You’ll need production env vars:
+
+DATABASE_URL="your-neon-production-url"
+AUTH_SECRET="new-production-secret"
+INVITE_CODE="your-real-friend-invite-code"
+AUTH_TRUST_HOST=true
+Auth.js notes that AUTH_TRUST_HOST=true is needed behind reverse proxies, and it may be inferred automatically on supported providers like Vercel, but setting it is fine. 
+
+6. Add a seed/admin plan
+Right now your admin access depends on changing your user role in Prisma Studio. On production, you need a clean way to make yourself admin.
+
+Simplest MVP plan:
+
+Deploy.
+
+Sign up with your email.
+
+Open Neon SQL editor.
+
+Run:
+
+UPDATE "User"
+SET "role" = 'ADMIN'
+WHERE "email" = 'your-email@example.com';
+Better later: add an admin seed script using an ADMIN_EMAIL env var.
+
+7. Do a quick security pass
+Before sharing the URL with friends, check:
+
+Can logged-out users access /picks? They should redirect to /login.
+Can normal users access /admin? They should redirect to /picks.
+Can normal users call /api/admin/results? It should return 403.
+Can someone submit picks twice? It should return 409.
+Can someone submit picks after lockAt? It should return 403.
+Can someone sign up without INVITE_CODE? It should fail.
+Also consider changing INVITE_CODE before sharing if you used a test one.
+
+8. Commit to GitHub
+From your project root:
+
+git init
+git status
+git add .
+git commit -m "Initial Pick Fights app"
+Then create a GitHub repo and push:
+
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin main
+Start private if you’re unsure. You can make it public later.
+
+9. Deploy on Vercel
+On Vercel:
+
+New Project
+Import GitHub repo
+Set environment variables
+Deploy
+Add these env vars in Vercel:
+
+DATABASE_URL=
+AUTH_SECRET=
+INVITE_CODE=
+AUTH_TRUST_HOST=true
+Next.js supports loading environment variables through .env* locally, but in production they should be configured in the hosting provider, not committed. 
+
+10. Run migrations in production
+After deploy, your production database needs the migrations applied.
+
+Best simple way: add this Vercel build command:
+
+npx prisma migrate deploy && npx prisma generate && next build
+Or keep build as:
+
+npm run build
+and make build in package.json:
+
+"build": "prisma migrate deploy && prisma generate && next build"
+Prisma also recommends running migrate deploy in the CI/CD pipeline for production changes. 
+
+11. Final production test
+After deploy:
+
+Sign up
+Log in
+Set profile picture
+Submit picks
+Confirm picks lock
+Promote yourself to ADMIN in Neon
+Log out/in
+Go to /admin
+Enter fake result
+Check /leaderboard
+The biggest things before GitHub are: do not commit .env, make sure npm run build passes, and use prisma migrate deploy for production.
+
+
+wait slower
+
+Totally — slow down.
+
+Right now, before GitHub or deployment, do only this first:
+
+Step A: make sure secrets are safe
+In your project root, check if you have a file named:
+
+.gitignore
+Open it and make sure it contains these lines:
+
+.env
+.env.*
+!.env.example
+.next
+node_modules
+This matters because your .env has stuff like:
+
+DATABASE_URL
+AUTH_SECRET
+INVITE_CODE
+You do not want those on GitHub.
+
+Then create a safe example file named:
+
+.env.example
+Put this inside:
+
+DATABASE_URL=""
+AUTH_SECRET=""
+INVITE_CODE=""
+AUTH_TRUST_HOST=true
+Do that first. After that, we’ll move to the next tiny step: checking whether Git will accidentally include your .env.
+
+
+Naložena slika
+Naložena slika
+where
+
+Thought for 5s
+Use the .gitignore that is already inside your expanded app folder.
+
+In your screenshot, this is the right place:
+
+PICKF...
+├─ app/
+│  ├─ .env
+│  ├─ .gitignore   ← open this one
+│  ├─ package.json
+│  ├─ prisma/
+│  └─ app/
+├─ scraper/
+Open:
+
+app/.gitignore
+Add these lines:
+
+.env
+.env.*
+!.env.example
+.next
+node_modules
+
+/app/generated/prisma
