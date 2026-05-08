@@ -9,12 +9,33 @@ import type { PickDraft } from "@/types/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function PicksPage() {
+type PageProps = {
+  searchParams?: Promise<{
+    view?: string;
+  }>;
+};
+
+export type CommunityPickUser = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  isYou: boolean;
+};
+
+export type FightCommunityPicks = {
+  fighterA: CommunityPickUser[];
+  fighterB: CommunityPickUser[];
+};
+
+export default async function PicksPage({ searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
   }
+
+  const params = await searchParams;
+  const requestedView = params?.view === "others" ? "others" : "mine";
 
   const event = await prisma.event.findFirst({
     where: {
@@ -75,7 +96,74 @@ export default async function PicksPage() {
   const now = new Date();
 
   const picksAreLocked =
-    Boolean(existingSubmission) || event.lockAt.getTime() <= now.getTime();
+    Boolean(existingSubmission) ||
+    event.status !== "OPEN" ||
+    event.lockAt.getTime() <= now.getTime();
+
+  const canViewOthers = Boolean(existingSubmission);
+  const view = canViewOthers ? requestedView : "mine";
+
+  const communityPicks: Record<string, FightCommunityPicks> = {};
+
+  if (view === "others") {
+    for (const fight of event.fights) {
+      communityPicks[fight.id] = {
+        fighterA: [],
+        fighterB: [],
+      };
+    }
+
+    const allSubmissions = await prisma.pickSubmission.findMany({
+      where: {
+        eventId: event.id,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            imageUrl: true,
+          },
+        },
+        choices: true,
+      },
+    });
+
+    const fightMap = new Map(
+      event.fights.map((fight) => [
+        fight.id,
+        {
+          fighterAId: fight.fighterA.id,
+          fighterBId: fight.fighterB.id,
+        },
+      ]),
+    );
+
+    for (const submission of allSubmissions) {
+      const user = {
+        id: submission.user.id,
+        name: submission.user.displayName || submission.user.username,
+        imageUrl: submission.user.imageUrl,
+        isYou: submission.user.id === session.user.id,
+      };
+
+      for (const choice of submission.choices) {
+        const fight = fightMap.get(choice.fightId);
+        const bucket = communityPicks[choice.fightId];
+
+        if (!fight || !bucket) continue;
+
+        if (choice.pickedFighterId === fight.fighterAId) {
+          bucket.fighterA.push(user);
+        }
+
+        if (choice.pickedFighterId === fight.fighterBId) {
+          bucket.fighterB.push(user);
+        }
+      }
+    }
+  }
 
   return (
     <>
@@ -86,7 +174,11 @@ export default async function PicksPage() {
           <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm">
             <h1 className="text-3xl font-black">{event.name}</h1>
 
-            {existingSubmission ? (
+            {view === "others" ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Everyone&apos;s submitted picks for this event.
+              </p>
+            ) : existingSubmission ? (
               <p className="mt-2 text-sm font-semibold text-neutral-500">
                 Your picks are submitted and locked. You can still open each
                 fight to view the details.
@@ -108,6 +200,9 @@ export default async function PicksPage() {
             fights={event.fights}
             initialPicks={initialPicks}
             isLocked={picksAreLocked}
+            view={view}
+            canViewOthers={canViewOthers}
+            communityPicks={communityPicks}
           />
         </section>
       </main>
