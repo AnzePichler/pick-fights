@@ -57,7 +57,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: true,
             username: true,
             displayName: true,
-            imageUrl: true,
             passwordHash: true,
             role: true,
           },
@@ -80,7 +79,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.displayName || user.username,
-          image: user.imageUrl,
           username: user.username,
           role: user.role,
         };
