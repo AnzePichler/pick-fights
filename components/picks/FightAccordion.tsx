@@ -135,8 +135,11 @@ export default function FightAccordion({
 
             {view === "others" && (
               <OthersPickRow
+                fighterAId={fight.fighterA.id}
+                fighterBId={fight.fighterB.id}
                 fighterAName={fight.fighterA.name}
                 fighterBName={fight.fighterB.name}
+                result={fight.result}
                 picks={communityPicks[fight.id]}
               />
             )}
@@ -168,12 +171,21 @@ export default function FightAccordion({
 }
 
 function OthersPickRow({
+  fighterAId,
+  fighterBId,
   fighterAName,
   fighterBName,
+  result,
   picks,
 }: {
+  fighterAId: string;
+  fighterBId: string;
   fighterAName: string;
   fighterBName: string;
+  result?: {
+    status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
+    winnerFighterId: string | null;
+  } | null;
   picks?: FightCommunityPicks;
 }) {
   const fighterAPicks = picks?.fighterA || [];
@@ -186,6 +198,28 @@ function OthersPickRow({
   const fighterBPercent =
     total === 0 ? 0 : Math.round((fighterBPicks.length / total) * 100);
 
+  const resultStatus = result?.status;
+  const hasResult = resultStatus && resultStatus !== "PENDING";
+
+  const isDrawLike =
+    resultStatus === "DRAW" ||
+    resultStatus === "NO_CONTEST" ||
+    resultStatus === "CANCELLED";
+
+  const fighterAOutcome = getCommunityOutcome({
+    fighterId: fighterAId,
+    winnerFighterId: result?.winnerFighterId || null,
+    hasResult: Boolean(hasResult),
+    isDrawLike,
+  });
+
+  const fighterBOutcome = getCommunityOutcome({
+    fighterId: fighterBId,
+    winnerFighterId: result?.winnerFighterId || null,
+    hasResult: Boolean(hasResult),
+    isDrawLike,
+  });
+
   return (
     <div className="rounded-2xl bg-white px-4 py-3 shadow-sm md:px-5 md:py-4">
       <div className="grid grid-cols-2 gap-3 md:gap-5">
@@ -194,6 +228,7 @@ function OthersPickRow({
           users={fighterAPicks}
           percent={fighterAPercent}
           align="left"
+          outcome={fighterAOutcome}
         />
 
         <PickGroup
@@ -201,10 +236,29 @@ function OthersPickRow({
           users={fighterBPicks}
           percent={fighterBPercent}
           align="right"
+          outcome={fighterBOutcome}
         />
       </div>
     </div>
   );
+}
+
+function getCommunityOutcome({
+  fighterId,
+  winnerFighterId,
+  hasResult,
+  isDrawLike,
+}: {
+  fighterId: string;
+  winnerFighterId: string | null;
+  hasResult: boolean;
+  isDrawLike: boolean;
+}) {
+  if (!hasResult) return "pending";
+  if (isDrawLike) return "draw";
+  if (winnerFighterId === fighterId) return "winner";
+
+  return "loser";
 }
 
 function PickGroup({
@@ -212,49 +266,106 @@ function PickGroup({
   users,
   percent,
   align,
+  outcome,
 }: {
   name: string;
   users: CommunityPickUser[];
   percent: number;
   align: "left" | "right";
+  outcome: "pending" | "winner" | "loser" | "draw";
 }) {
   const isRight = align === "right";
   const shownUsers = users.slice(0, 4);
   const extraCount = users.length - shownUsers.length;
 
-  return (
-    <div className={`min-w-0 ${isRight ? "text-right" : "text-left"}`}>
-      <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400 md:text-xs">
-        Picked {name}
-      </div>
+  const directionClass = isRight ? "bg-gradient-to-l" : "bg-gradient-to-r";
 
+  const outcomeGradient =
+    outcome === "winner"
+      ? `${directionClass} from-green-500 via-transparent to-transparent`
+      : outcome === "loser"
+        ? `${directionClass} from-red-500 via-transparent to-transparent`
+        : outcome === "draw"
+          ? `${directionClass} from-neutral-500 via-transparent to-transparent`
+          : "bg-transparent";
+
+  const outcomeLabel =
+    outcome === "winner"
+      ? "WON"
+      : outcome === "loser"
+        ? "LOST"
+        : outcome === "draw"
+          ? "NO WINNER"
+          : null;
+
+  const outcomeBadgeClass =
+    outcome === "winner"
+      ? "bg-green-100 text-green-700"
+      : outcome === "loser"
+        ? "bg-red-100 text-red-700"
+        : "bg-neutral-100 text-neutral-600";
+
+  return (
+    <div className={`rounded-2xl p-[2px] ${outcomeGradient}`}>
       <div
-        className={`mt-2 flex items-center gap-2 ${
-          isRight ? "justify-end" : "justify-start"
+        className={`min-w-0 rounded-[0.9rem] bg-white px-2.5 py-2 ${
+          isRight ? "text-right" : "text-left"
         }`}
       >
         <div
-          className={`flex min-w-0 shrink items-center gap-1 ${
+          className={`flex items-center gap-2 ${
             isRight ? "justify-end" : "justify-start"
           }`}
         >
-          {shownUsers.map((user) => (
-            <Avatar key={user.id} user={user} />
-          ))}
+          {!isRight && outcomeLabel && (
+            <div
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${outcomeBadgeClass}`}
+            >
+              {outcomeLabel}
+            </div>
+          )}
 
-          {extraCount > 0 && (
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-black text-neutral-600 md:h-9 md:w-9 md:text-xs">
-              +{extraCount}
+          <div className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400 md:text-xs">
+            Picked {name}
+          </div>
+
+          {isRight && outcomeLabel && (
+            <div
+              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${outcomeBadgeClass}`}
+            >
+              {outcomeLabel}
             </div>
           )}
         </div>
 
-        <div className="shrink-0 leading-tight">
-          <div className="text-xs font-black text-neutral-800 md:text-sm">
-            {users.length}
+        <div
+          className={`mt-2 flex items-center gap-2 ${
+            isRight ? "justify-end" : "justify-start"
+          }`}
+        >
+          <div
+            className={`flex min-w-0 shrink items-center gap-1 ${
+              isRight ? "justify-end" : "justify-start"
+            }`}
+          >
+            {shownUsers.map((user) => (
+              <Avatar key={user.id} user={user} />
+            ))}
+
+            {extraCount > 0 && (
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-black text-neutral-600 md:h-9 md:w-9 md:text-xs">
+                +{extraCount}
+              </div>
+            )}
           </div>
-          <div className="text-xs font-bold text-blue-600 md:text-sm">
-            {percent}%
+
+          <div className="shrink-0 leading-tight">
+            <div className="text-xs font-black text-neutral-800 md:text-sm">
+              {users.length}
+            </div>
+            <div className="text-xs font-bold text-blue-600 md:text-sm">
+              {percent}%
+            </div>
           </div>
         </div>
       </div>

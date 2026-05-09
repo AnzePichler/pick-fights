@@ -46,6 +46,12 @@ export default async function PicksPage({ searchParams }: PageProps) {
         include: {
           fighterA: true,
           fighterB: true,
+          result: {
+            select: {
+              status: true,
+              winnerFighterId: true,
+            },
+          },
         },
         orderBy: {
           order: "asc",

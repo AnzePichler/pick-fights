@@ -57,6 +57,7 @@ export async function POST(request: Request) {
       select: {
         id: true,
         name: true,
+        slug: true,
         status: true,
         lockAt: true,
         fights: {
@@ -80,7 +81,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (event.status !== "OPEN") {
+    const isTestEvent = event.slug === "ufc-test" && event.status === "DRAFT";
+    if (!isTestEvent && event.status !== "OPEN") {
       return NextResponse.json(
         {
           error: "Picks are closed for this event.",
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (event.lockAt.getTime() <= Date.now()) {
+    if (!isTestEvent && event.lockAt.getTime() <= Date.now()) {
       return NextResponse.json(
         {
           error: "This event is already locked.",

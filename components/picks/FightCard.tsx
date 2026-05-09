@@ -17,11 +17,63 @@ export default function FightCard({
   const fighterASelected = selectedFighterId === fight.fighterA.id;
   const fighterBSelected = selectedFighterId === fight.fighterB.id;
 
-  const selectedBorderClass = fighterASelected
-    ? "bg-gradient-to-r from-blue-500 via-transparent to-transparent"
+  const resultStatus = fight.result?.status;
+  const winnerFighterId = fight.result?.winnerFighterId;
+
+  const fightHasResult = resultStatus && resultStatus !== "PENDING";
+
+  const fightIsDrawLike =
+    resultStatus === "DRAW" ||
+    resultStatus === "NO_CONTEST" ||
+    resultStatus === "CANCELLED";
+
+  const selectedPickIsCorrect =
+    fightHasResult &&
+    resultStatus === "WINNER" &&
+    selectedFighterId === winnerFighterId;
+
+  const selectedPickIsWrong =
+    fightHasResult &&
+    resultStatus === "WINNER" &&
+    Boolean(selectedFighterId) &&
+    selectedFighterId !== winnerFighterId;
+
+  const selectedPickIsDrawLike =
+    fightHasResult && fightIsDrawLike && Boolean(selectedFighterId);
+
+  const selectedSideGradient = fighterASelected
+    ? "bg-gradient-to-r"
     : fighterBSelected
-      ? "bg-gradient-to-l from-blue-500 via-transparent to-transparent"
+      ? "bg-gradient-to-l"
       : "";
+
+  const selectedHighlightClass = selectedPickIsCorrect
+    ? `${selectedSideGradient} from-green-500 via-transparent to-transparent`
+    : selectedPickIsWrong
+      ? `${selectedSideGradient} from-red-500 via-transparent to-transparent`
+      : selectedPickIsDrawLike
+        ? `${selectedSideGradient} from-neutral-500 via-transparent to-transparent`
+        : selectedFighterId
+          ? `${selectedSideGradient} from-blue-500 via-transparent to-transparent`
+          : "";
+
+  const selectedIconSrc = selectedPickIsCorrect
+    ? "/correct.svg"
+    : selectedPickIsWrong
+      ? "/wrong.svg"
+      : selectedPickIsDrawLike
+        ? "/draw.svg"
+        : selectedFighterId
+          ? "/checkmark.svg"
+          : null;
+
+  const selectedIconAlt = selectedPickIsCorrect
+    ? "Correct pick"
+    : selectedPickIsWrong
+      ? "Wrong pick"
+      : selectedPickIsDrawLike
+        ? "Draw, no contest, or cancelled"
+        : "Selected";
 
   const fighterAWins = getTotalWins(fight.fighterA.record);
   const fighterBWins = getTotalWins(fight.fighterB.record);
@@ -31,16 +83,18 @@ export default function FightCard({
       {selectedFighterId && (
         <>
           <div
-            className={`pointer-events-none absolute -inset-1.5 rounded-[1.8rem] md:-inset-1.5 md:rounded-[2.2rem] ${selectedBorderClass}`}
+            className={`pointer-events-none absolute -inset-1.5 rounded-[1.8rem] md:-inset-1.5 md:rounded-[2.2rem] ${selectedHighlightClass}`}
           />
 
-          <img
-            src="/checkmark.svg"
-            alt="Selected"
-            className={`pointer-events-none absolute top-5 z-30 h-5 w-5 -translate-y-1/2 md:top-6 md:h-6 md:w-6 ${
-              fighterASelected ? "left-2 md:left-3" : "right-2 md:right-3"
-            }`}
-          />
+          {selectedIconSrc && (
+            <img
+              src={selectedIconSrc}
+              alt={selectedIconAlt}
+              className={`pointer-events-none absolute top-5 z-30 h-5 w-5 -translate-y-1/2 md:top-6 md:h-6 md:w-6 ${
+                fighterASelected ? "left-2 md:left-3" : "right-2 md:right-3"
+              }`}
+            />
+          )}
         </>
       )}
 

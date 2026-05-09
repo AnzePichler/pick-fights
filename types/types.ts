@@ -18,9 +18,16 @@ export type Fighter = {
 
 export type Fight = {
   id: string;
+  eventId: string;
+  fighterAId: string;
+  fighterBId: string;
   order: number;
   fighterA: Fighter;
   fighterB: Fighter;
+  result?: {
+    status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
+    winnerFighterId: string | null;
+  } | null;
 };
 
 export type PickDraft = {

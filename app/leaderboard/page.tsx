@@ -40,6 +40,7 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const activeEvent = await prisma.event.findFirst({
     where: {
       isActive: true,
+      status: "OPEN",
     },
     select: {
       id: true,
@@ -146,7 +147,14 @@ async function getLeaderboardRows({
         ? {
             eventId,
           }
-        : undefined,
+        : {
+            event: {
+              status: "COMPLETED",
+              slug: {
+                not: "ufc-test",
+              },
+            },
+          },
     include: {
       user: {
         select: {
