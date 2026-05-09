@@ -145,10 +145,10 @@ export default function FightAccordion({
       </div>
 
       {locked && canViewOthers ? (
-        <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2">
+        <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 md:bottom-8 md:w-auto">
           <a
             href={view === "others" ? "/picks" : "/picks?view=others"}
-            className="block rounded-2xl bg-blue-600 px-6 py-4 text-center font-bold text-white shadow-lg transition hover:bg-blue-700"
+            className="block w-full rounded-2xl bg-blue-600 px-6 py-4 text-center font-bold text-white shadow-lg transition hover:bg-blue-700 md:w-auto"
           >
             {view === "others" ? "Back to My Picks" : "See Everyone's Picks"}
           </a>
@@ -187,8 +187,8 @@ function OthersPickRow({
     total === 0 ? 0 : Math.round((fighterBPicks.length / total) * 100);
 
   return (
-    <div className="rounded-2xl bg-white px-5 py-4 shadow-sm">
-      <div className="grid gap-5 md:grid-cols-2">
+    <div className="rounded-2xl bg-white px-4 py-3 shadow-sm md:px-5 md:py-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-5">
         <PickGroup
           name={fighterAName}
           users={fighterAPicks}
@@ -219,22 +219,22 @@ function PickGroup({
   align: "left" | "right";
 }) {
   const isRight = align === "right";
-  const shownUsers = users.slice(0, 5);
+  const shownUsers = users.slice(0, 4);
   const extraCount = users.length - shownUsers.length;
 
   return (
-    <div className={isRight ? "text-right" : "text-left"}>
-      <div className="text-xs font-black uppercase tracking-widest text-neutral-400">
+    <div className={`min-w-0 ${isRight ? "text-right" : "text-left"}`}>
+      <div className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400 md:text-xs">
         Picked {name}
       </div>
 
       <div
-        className={`mt-3 flex items-center gap-4 ${
+        className={`mt-2 flex items-center gap-2 ${
           isRight ? "justify-end" : "justify-start"
         }`}
       >
         <div
-          className={`flex shrink-0 items-center gap-2 ${
+          className={`flex min-w-0 shrink items-center gap-1 ${
             isRight ? "justify-end" : "justify-start"
           }`}
         >
@@ -243,17 +243,19 @@ function PickGroup({
           ))}
 
           {extraCount > 0 && (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white bg-neutral-100 text-xs font-black text-neutral-600 shadow-sm">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[10px] font-black text-neutral-600 md:h-9 md:w-9 md:text-xs">
               +{extraCount}
             </div>
           )}
         </div>
 
-        <div className="shrink-0">
-          <div className="text-sm font-black text-neutral-800">
-            {users.length} {users.length === 1 ? "pick" : "picks"}
+        <div className="shrink-0 leading-tight">
+          <div className="text-xs font-black text-neutral-800 md:text-sm">
+            {users.length}
           </div>
-          <div className="text-sm font-bold text-blue-600">{percent}%</div>
+          <div className="text-xs font-bold text-blue-600 md:text-sm">
+            {percent}%
+          </div>
         </div>
       </div>
     </div>
@@ -264,8 +266,8 @@ function Avatar({ user }: { user: CommunityPickUser }) {
   return (
     <div
       title={user.isYou ? `${user.name} (You)` : user.name}
-      className={`h-9 w-9 shrink-0 overflow-hidden rounded-full bg-neutral-200 ${
-        user.isYou ? "ring-3 ring-blue-500" : ""
+      className={`h-7 w-7 shrink-0 overflow-hidden rounded-full bg-neutral-200 md:h-9 md:w-9 ${
+        user.isYou ? "ring-2 ring-blue-500" : ""
       }`}
     >
       {user.imageUrl ? (
@@ -275,7 +277,7 @@ function Avatar({ user }: { user: CommunityPickUser }) {
           className="h-full w-full object-cover"
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-xs font-black text-neutral-700">
+        <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-neutral-700 md:text-xs">
           {getInitials(user.name)}
         </div>
       )}

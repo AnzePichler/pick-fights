@@ -28,7 +28,7 @@ export default function SubmitPicksButton({
         : "Submit Picks";
 
   return (
-    <div className="fixed bottom-8 left-1/2 z-50 w-54 -translate-x-1/2">
+    <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 md:bottom-8 md:w-54">
       <button
         type="button"
         disabled={disabled}

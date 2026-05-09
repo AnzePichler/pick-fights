@@ -31,22 +31,22 @@ export default function FightCard({
       {selectedFighterId && (
         <>
           <div
-            className={`pointer-events-none absolute -inset-2 rounded-[2.3rem] ${selectedBorderClass}`}
+            className={`pointer-events-none absolute -inset-1.5 rounded-[2rem] md:-inset-2 md:rounded-[2.3rem] ${selectedBorderClass}`}
           />
 
           <img
             src="/checkmark.svg"
             alt="Selected"
-            className={`pointer-events-none absolute top-8 z-30 h-8 w-8 -translate-y-1/2 ${
-              fighterASelected ? "left-3" : "right-3"
+            className={`pointer-events-none absolute top-6 z-30 h-6 w-6 -translate-y-1/2 md:top-8 md:h-8 md:w-8 ${
+              fighterASelected ? "left-2 md:left-3" : "right-2 md:right-3"
             }`}
           />
         </>
       )}
 
-      <details className="relative overflow-hidden rounded-[1.85rem] bg-white shadow-sm transition">
-        <summary className="cursor-pointer list-none px-5 py-5">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+      <details className="relative overflow-hidden rounded-[1.5rem] bg-white shadow-sm transition md:rounded-[1.85rem]">
+        <summary className="cursor-pointer list-none px-3 py-4 md:px-5 md:py-5">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
             <FighterSide
               fighter={fight.fighterA}
               align="left"
@@ -54,7 +54,9 @@ export default function FightCard({
               isLocked={isLocked}
             />
 
-            <div className="text-sm font-bold text-gray-400">VS</div>
+            <div className="px-1 text-xs font-black text-gray-400 md:text-sm">
+              VS
+            </div>
 
             <FighterSide
               fighter={fight.fighterB}
@@ -77,10 +79,10 @@ export default function FightCard({
               event.currentTarget.closest("details")?.removeAttribute("open");
             }
           }}
-          className="cursor-pointer px-8 pb-8"
+          className="cursor-pointer px-3 pb-4 md:px-8 md:pb-8"
         >
-          <div className="rounded-3xl bg-white/70 px-8 py-7">
-            <div className="grid grid-cols-[1fr_minmax(260px,340px)_1fr] items-center gap-10">
+          <div className="rounded-2xl bg-white/70 px-3 py-4 md:rounded-3xl md:px-8 md:py-7">
+            <div className="grid grid-cols-[minmax(70px,1fr)_minmax(110px,1.2fr)_minmax(70px,1fr)] items-center gap-2 md:grid-cols-[1fr_minmax(260px,340px)_1fr] md:gap-10">
               <MethodStatsBlock
                 side="left"
                 totalWins={fighterAWins}
@@ -89,7 +91,7 @@ export default function FightCard({
                 decWins={fight.fighterA.winsByDec}
               />
 
-              <div className="space-y-6">
+              <div className="space-y-3 md:space-y-6">
                 <ComparisonRow
                   left={fight.fighterA.age}
                   label="Age"
@@ -138,7 +140,7 @@ function MethodStatsBlock({
   decWins: number | null | undefined;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3 md:space-y-6">
       <MethodRow
         side={side}
         label="KO"
@@ -171,12 +173,12 @@ function MethodRow({
 }) {
   if (side === "left") {
     return (
-      <div className="grid grid-cols-[36px_54px_1fr] items-center gap-3">
-        <span className="text-left text-base font-bold text-neutral-500">
+      <div className="grid grid-cols-[22px_32px_minmax(28px,1fr)] items-center gap-1.5 md:grid-cols-[36px_54px_1fr] md:gap-3">
+        <span className="text-left text-[10px] font-bold text-neutral-500 md:text-base">
           {label}
         </span>
 
-        <span className="text-right text-lg font-semibold text-neutral-700">
+        <span className="text-right text-xs font-semibold text-neutral-700 md:text-lg">
           {percent === null ? "—" : `${percent}%`}
         </span>
 
@@ -186,14 +188,14 @@ function MethodRow({
   }
 
   return (
-    <div className="grid grid-cols-[1fr_54px_36px] items-center gap-3">
+    <div className="grid grid-cols-[minmax(28px,1fr)_32px_22px] items-center gap-1.5 md:grid-cols-[1fr_54px_36px] md:gap-3">
       <OutsideToCenterBar percent={percent} side="right" />
 
-      <span className="text-left text-lg font-semibold text-neutral-700">
+      <span className="text-left text-xs font-semibold text-neutral-700 md:text-lg">
         {percent === null ? "—" : `${percent}%`}
       </span>
 
-      <span className="text-right text-base font-bold text-neutral-500">
+      <span className="text-right text-[10px] font-bold text-neutral-500 md:text-base">
         {label}
       </span>
     </div>
@@ -210,7 +212,7 @@ function OutsideToCenterBar({
   const width = percent === null ? 0 : Math.max(0, Math.min(100, percent));
 
   return (
-    <div className="h-4 w-full overflow-hidden rounded-sm bg-neutral-100">
+    <div className="h-2.5 w-full overflow-hidden rounded-sm bg-neutral-100 md:h-4">
       <div
         className={`h-full bg-green-600 ${
           side === "left" ? "mr-auto" : "ml-auto"
@@ -233,16 +235,16 @@ function ComparisonRow({
   right: string | number | null | undefined;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_82px_1fr] items-center gap-5">
-      <div className="text-right text-xl font-semibold text-neutral-700">
+    <div className="grid grid-cols-[1fr_46px_1fr] items-center gap-2 md:grid-cols-[1fr_82px_1fr] md:gap-5">
+      <div className="text-right text-xs font-semibold text-neutral-700 md:text-xl">
         {displayValue(left)}
       </div>
 
-      <div className="text-center text-md font-bold text-neutral-500">
+      <div className="text-center text-[10px] font-bold text-neutral-500 md:text-md">
         {label}
       </div>
 
-      <div className="text-left text-xl font-semibold text-neutral-700">
+      <div className="text-left text-xs font-semibold text-neutral-700 md:text-xl">
         {displayValue(right)}
       </div>
     </div>
