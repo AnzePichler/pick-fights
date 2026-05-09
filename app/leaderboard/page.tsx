@@ -107,7 +107,17 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
             </div>
           </div>
 
-          <LeaderboardTable rows={rows} />
+          {rows.length > 0 && (
+            <>
+              <div className="md:hidden">
+                <LeaderboardMobileCards rows={rows} />
+              </div>
+
+              <div className="hidden md:block">
+                <LeaderboardTable rows={rows} />
+              </div>
+            </>
+          )}
 
           {rows.length === 0 && (
             <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
@@ -289,6 +299,69 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
   );
 }
 
+function LeaderboardMobileCards({ rows }: { rows: LeaderboardRow[] }) {
+  return (
+    <div className="space-y-4">
+      {rows.map((row) => (
+        <div key={row.userId} className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <PositionBadge position={row.position} />
+
+              <Avatar imageUrl={row.imageUrl} name={row.name} />
+
+              <div className="min-w-0">
+                <div className="truncate text-lg font-black text-neutral-800">
+                  {row.name}
+                </div>
+
+                <div className="truncate text-sm font-semibold text-neutral-400">
+                  @{row.username}
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 text-right">
+              <div className="text-2xl font-black text-blue-600">
+                {row.points}
+              </div>
+              <div className="text-xs font-black uppercase tracking-wider text-neutral-400">
+                points
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-neutral-50 p-4">
+              <div className="text-xs font-black uppercase tracking-wider text-neutral-400">
+                Correct
+              </div>
+
+              <div className="mt-1 text-xl font-black text-neutral-800">
+                {row.correct}
+                <span className="text-sm font-bold text-neutral-400">
+                  {" "}
+                  / {row.totalPicked}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-neutral-50 p-4">
+              <div className="text-xs font-black uppercase tracking-wider text-neutral-400">
+                Accuracy
+              </div>
+
+              <div className="mt-1 text-xl font-black text-neutral-800">
+                {row.correctPercentage}%
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PositionBadge({ position }: { position: number }) {
   const label =
     position === 1
@@ -300,7 +373,7 @@ function PositionBadge({ position }: { position: number }) {
           : `#${position}`;
 
   return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 text-lg font-black text-neutral-700">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-neutral-100 text-base font-black text-neutral-700 md:h-12 md:w-12 md:text-lg">
       {label}
     </div>
   );
@@ -309,14 +382,14 @@ function PositionBadge({ position }: { position: number }) {
 function Avatar({ imageUrl, name }: { imageUrl: string | null; name: string }) {
   if (imageUrl) {
     return (
-      <span className="h-14 w-14 shrink-0 overflow-hidden rounded-full bg-neutral-200">
+      <span className="h-12 w-12 shrink-0 overflow-hidden rounded-full bg-neutral-200 md:h-14 md:w-14">
         <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
       </span>
     );
   }
 
   return (
-    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-neutral-300 text-base font-black text-neutral-700">
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-neutral-300 text-sm font-black text-neutral-700 md:h-14 md:w-14 md:text-base">
       {getInitials(name)}
     </span>
   );
