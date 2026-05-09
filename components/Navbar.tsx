@@ -117,6 +117,33 @@ export default async function Navbar() {
           )}
         </div>
       </nav>
+
+      {session?.user && (
+        <div className="border-t border-gray-100 bg-white px-4 py-2 md:hidden">
+          <div className="mx-auto grid max-w-md grid-cols-3 gap-2">
+            <a
+              href="/picks"
+              className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
+            >
+              Picks
+            </a>
+
+            <a
+              href="/leaderboard"
+              className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
+            >
+              Leaderboard
+            </a>
+
+            <a
+              href="/account"
+              className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
+            >
+              Account
+            </a>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
