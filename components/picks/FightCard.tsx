@@ -31,13 +31,13 @@ export default function FightCard({
       {selectedFighterId && (
         <>
           <div
-            className={`pointer-events-none absolute -inset-1.5 rounded-[2rem] md:-inset-2 md:rounded-[2.3rem] ${selectedBorderClass}`}
+            className={`pointer-events-none absolute -inset-1.5 rounded-[1.8rem] md:-inset-1.5 md:rounded-[2.2rem] ${selectedBorderClass}`}
           />
 
           <img
             src="/checkmark.svg"
             alt="Selected"
-            className={`pointer-events-none absolute top-6 z-30 h-6 w-6 -translate-y-1/2 md:top-8 md:h-8 md:w-8 ${
+            className={`pointer-events-none absolute top-5 z-30 h-5 w-5 -translate-y-1/2 md:top-6 md:h-6 md:w-6 ${
               fighterASelected ? "left-2 md:left-3" : "right-2 md:right-3"
             }`}
           />
