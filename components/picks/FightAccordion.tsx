@@ -147,6 +147,17 @@ export default function FightAccordion({
                 }}
               />
             )}
+
+            {view === "others" && (
+              <OthersPickRow
+                fighterAId={fight.fighterA.id}
+                fighterBId={fight.fighterB.id}
+                fighterAName={fight.fighterA.name}
+                fighterBName={fight.fighterB.name}
+                result={fight.result}
+                picks={communityPicks[fight.id]}
+              />
+            )}
           </div>
         ))}
       </div>
