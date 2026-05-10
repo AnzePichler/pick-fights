@@ -35,31 +35,31 @@ export default async function Navbar() {
           Pick Fights
         </a>
 
-        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 md:flex">
+        <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 md:flex">
           <a
             href="/picks"
-            className="text-lg font-[1000] text-neutral-700 transition hover:text-neutral-800"
+            className="text-md font-[1000] text-neutral-700 transition hover:text-neutral-800"
           >
             Make picks
           </a>
 
           <a
             href="/my-picks"
-            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             My picks
           </a>
 
           <a
             href="/leaderboard"
-            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             Leaderboard
           </a>
 
           <a
             href="/account"
-            className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+            className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             Account
           </a>
@@ -67,7 +67,7 @@ export default async function Navbar() {
           {session?.user?.role === "ADMIN" && (
             <a
               href="/admin"
-              className="text-lg font-semibold text-gray-700 transition hover:text-neutral-800"
+              className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
             >
               Admin
             </a>
