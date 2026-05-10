@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
+import {
+  calculatePickPoints,
+  getRarityMultiplier,
+  isCorrectWinnerPick,
+} from "../../lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +33,7 @@ export default async function TestEventLeaderboardPage() {
 
   const event = await prisma.event.findUnique({
     where: {
-      slug: "ufc-test",
+      slug: "ufc-328",
     },
     select: {
       id: true,
@@ -194,6 +199,37 @@ async function getTestLeaderboardRows(
     },
   });
 
+  const fightStats = new Map<
+    string,
+    {
+      totalPickCount: number;
+      winnerPickCount: number;
+    }
+  >();
+
+  for (const submission of submissions) {
+    for (const choice of submission.choices) {
+      const result = choice.fight.result;
+
+      if (result?.status !== "WINNER" || !result.winnerFighterId) {
+        continue;
+      }
+
+      const current = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      current.totalPickCount += 1;
+
+      if (choice.pickedFighterId === result.winnerFighterId) {
+        current.winnerPickCount += 1;
+      }
+
+      fightStats.set(choice.fightId, current);
+    }
+  }
+
   const rows = submissions.map((submission) => {
     let correct = 0;
     let points = 0;
@@ -201,14 +237,29 @@ async function getTestLeaderboardRows(
     for (const choice of submission.choices) {
       const result = choice.fight.result;
 
-      const isCorrect =
-        result?.status === "WINNER" &&
-        result.winnerFighterId === choice.pickedFighterId;
+      const isCorrect = isCorrectWinnerPick({
+        pickedFighterId: choice.pickedFighterId,
+        result,
+      });
 
       if (isCorrect) {
         correct += 1;
-        points += 100;
       }
+
+      const stats = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      const rarityMultiplier = getRarityMultiplier(stats);
+
+      points += calculatePickPoints({
+        pickedFighterId: choice.pickedFighterId,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
+        result,
+        rarityMultiplier,
+      });
     }
 
     const totalPicked = submission.choices.length;
@@ -231,6 +282,10 @@ async function getTestLeaderboardRows(
     .sort((a, b) => {
       if (b.points !== a.points) return b.points - a.points;
       if (b.correct !== a.correct) return b.correct - a.correct;
+      if (b.correctPercentage !== a.correctPercentage) {
+        return b.correctPercentage - a.correctPercentage;
+      }
+
       return a.name.localeCompare(b.name);
     })
     .map((row, index) => ({

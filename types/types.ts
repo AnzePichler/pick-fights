@@ -27,9 +27,13 @@ export type Fight = {
   result?: {
     status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
     winnerFighterId: string | null;
+    method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+    round: number | null;
   } | null;
 };
 
 export type PickDraft = {
   fighterId: string;
+  method?: "KO_TKO" | "SUBMISSION" | "DECISION";
+  round?: number;
 };

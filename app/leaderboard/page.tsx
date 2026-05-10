@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
+import {
+  calculatePickPoints,
+  getRarityMultiplier,
+  isCorrectWinnerPick,
+} from "../lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -37,29 +42,57 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const scope: Scope = params?.scope === "alltime" ? "alltime" : "event";
 
-  const leaderboardEvent = await prisma.event.findFirst({
+  const activeEvent = await prisma.event.findFirst({
     where: {
+      isActive: true,
       slug: {
         not: "ufc-test",
       },
       status: {
-        in: ["OPEN", "LOCKED", "COMPLETED"],
+        in: ["OPEN", "LOCKED"],
       },
     },
-    orderBy: [
-      {
-        isActive: "desc",
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      fights: {
+        select: {
+          result: {
+            select: {
+              status: true,
+            },
+          },
+        },
       },
-      {
-        startsAt: "desc",
+    },
+  });
+
+  const activeEventHasResult =
+    activeEvent?.fights.some((fight) => {
+      return fight.result && fight.result.status !== "PENDING";
+    }) ?? false;
+
+  const lastCompletedEvent = await prisma.event.findFirst({
+    where: {
+      slug: {
+        not: "ufc-test",
       },
-    ],
+      status: "COMPLETED",
+    },
+    orderBy: {
+      startsAt: "desc",
+    },
     select: {
       id: true,
       name: true,
       status: true,
     },
   });
+
+  const leaderboardEvent = activeEventHasResult
+    ? activeEvent
+    : (lastCompletedEvent ?? activeEvent);
 
   const rows =
     scope === "event"
@@ -89,7 +122,11 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
                 <p className="mt-2 text-sm font-semibold text-neutral-500">
                   {scope === "event"
                     ? leaderboardEvent
-                      ? `${leaderboardEvent.status === "COMPLETED" ? "Last event" : "Current event"}: ${leaderboardEvent.name}`
+                      ? `${
+                          leaderboardEvent.status === "COMPLETED"
+                            ? "Last event"
+                            : "Current event"
+                        }: ${leaderboardEvent.name}`
                       : "No event selected."
                     : "All-time points across completed events."}
                 </p>
@@ -189,6 +226,37 @@ async function getLeaderboardRows({
     },
   });
 
+  const fightStats = new Map<
+    string,
+    {
+      totalPickCount: number;
+      winnerPickCount: number;
+    }
+  >();
+
+  for (const submission of submissions) {
+    for (const choice of submission.choices) {
+      const result = choice.fight.result;
+
+      if (result?.status !== "WINNER" || !result.winnerFighterId) {
+        continue;
+      }
+
+      const current = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      current.totalPickCount += 1;
+
+      if (choice.pickedFighterId === result.winnerFighterId) {
+        current.winnerPickCount += 1;
+      }
+
+      fightStats.set(choice.fightId, current);
+    }
+  }
+
   const rowsByUser = new Map<string, Omit<LeaderboardRow, "position">>();
 
   for (const submission of submissions) {
@@ -210,14 +278,29 @@ async function getLeaderboardRows({
 
       const result = choice.fight.result;
 
-      const isCorrect =
-        result?.status === "WINNER" &&
-        result.winnerFighterId === choice.pickedFighterId;
+      const isCorrect = isCorrectWinnerPick({
+        pickedFighterId: choice.pickedFighterId,
+        result,
+      });
 
       if (isCorrect) {
         existing.correct += 1;
-        existing.points += 100;
       }
+
+      const stats = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      const rarityMultiplier = getRarityMultiplier(stats);
+
+      existing.points += calculatePickPoints({
+        pickedFighterId: choice.pickedFighterId,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
+        result,
+        rarityMultiplier,
+      });
     }
 
     existing.correctPercentage =

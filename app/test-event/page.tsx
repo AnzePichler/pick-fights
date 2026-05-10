@@ -39,7 +39,7 @@ export default async function TestEventPage({ searchParams }: PageProps) {
 
   const event = await prisma.event.findUnique({
     where: {
-      slug: "ufc-test",
+      slug: "ufc-328",
     },
     include: {
       fights: {
@@ -50,6 +50,8 @@ export default async function TestEventPage({ searchParams }: PageProps) {
             select: {
               status: true,
               winnerFighterId: true,
+              method: true,
+              round: true,
             },
           },
         },

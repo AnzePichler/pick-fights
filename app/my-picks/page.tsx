@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
+import {
+  calculatePickPoints,
+  getRarityMultiplier,
+  isCorrectWinnerPick,
+} from "../lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +64,8 @@ export default async function MyPicksPage() {
                 select: {
                   status: true,
                   winnerFighterId: true,
+                  method: true,
+                  round: true,
                 },
               },
             },
@@ -73,12 +80,73 @@ export default async function MyPicksPage() {
     },
   });
 
+  const eventIds = submissions.map((submission) => submission.event.id);
+
+  const allSubmissionsForStats =
+    eventIds.length === 0
+      ? []
+      : await prisma.pickSubmission.findMany({
+          where: {
+            eventId: {
+              in: eventIds,
+            },
+          },
+          include: {
+            choices: {
+              include: {
+                fight: {
+                  include: {
+                    result: {
+                      select: {
+                        status: true,
+                        winnerFighterId: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+  const fightStats = new Map<
+    string,
+    {
+      totalPickCount: number;
+      winnerPickCount: number;
+    }
+  >();
+
+  for (const submission of allSubmissionsForStats) {
+    for (const choice of submission.choices) {
+      const result = choice.fight.result;
+
+      if (result?.status !== "WINNER" || !result.winnerFighterId) {
+        continue;
+      }
+
+      const current = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      current.totalPickCount += 1;
+
+      if (choice.pickedFighterId === result.winnerFighterId) {
+        current.winnerPickCount += 1;
+      }
+
+      fightStats.set(choice.fightId, current);
+    }
+  }
+
   const cards = submissions.map((submission) => {
     let correct = 0;
     let points = 0;
 
     const picks = submission.choices.map((choice) => {
       const fight = choice.fight;
+
       const pickedFighter =
         choice.pickedFighterId === fight.fighterA.id
           ? fight.fighterA
@@ -89,10 +157,31 @@ export default async function MyPicksPage() {
         result: fight.result,
       });
 
-      if (resultState === "correct") {
+      const isCorrect = isCorrectWinnerPick({
+        pickedFighterId: choice.pickedFighterId,
+        result: fight.result,
+      });
+
+      if (isCorrect) {
         correct += 1;
-        points += 100;
       }
+
+      const stats = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      const rarityMultiplier = getRarityMultiplier(stats);
+
+      const pickPoints = calculatePickPoints({
+        pickedFighterId: choice.pickedFighterId,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
+        result: fight.result,
+        rarityMultiplier,
+      });
+
+      points += pickPoints;
 
       return {
         id: choice.id,
@@ -103,6 +192,9 @@ export default async function MyPicksPage() {
             : fight.fighterA,
         fight,
         resultState,
+        points: pickPoints,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
       };
     });
 
@@ -198,13 +290,24 @@ export default async function MyPicksPage() {
                               {pick.pickedFighter.name}
                             </div>
 
-                            <div className="truncate text-sm font-semibold text-neutral-400">
-                              picked vs {pick.opponent.name}
-                            </div>
+                            {pick.pickedMethod && (
+                              <div className="mt-1 text-xs font-bold text-neutral-400">
+                                Prediction: {formatMethod(pick.pickedMethod)}
+                                {pick.pickedRound
+                                  ? ` · R${pick.pickedRound}`
+                                  : ""}
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <ResultLabel state={pick.resultState} />
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-black text-neutral-700">
+                            {pick.points} pts
+                          </span>
+
+                          <ResultLabel state={pick.resultState} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -353,4 +456,10 @@ function formatDate(date: Date) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function formatMethod(method: "KO_TKO" | "SUBMISSION" | "DECISION") {
+  if (method === "KO_TKO") return "KO/TKO";
+  if (method === "SUBMISSION") return "SUB";
+  return "DEC";
 }

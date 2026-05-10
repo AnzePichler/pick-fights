@@ -78,6 +78,8 @@ export default function FightAccordion({
     const choices = Object.entries(selectedPicks).map(([fightId, pick]) => ({
       fightId,
       pickedFighterId: pick.fighterId,
+      pickedMethod: pick.method ?? null,
+      pickedRound: pick.round ?? null,
     }));
 
     setIsSubmitting(true);
@@ -133,14 +135,16 @@ export default function FightAccordion({
               isLocked={locked || view === "others"}
             />
 
-            {view === "others" && (
-              <OthersPickRow
-                fighterAId={fight.fighterA.id}
-                fighterBId={fight.fighterB.id}
-                fighterAName={fight.fighterA.name}
-                fighterBName={fight.fighterB.name}
-                result={fight.result}
-                picks={communityPicks[fight.id]}
+            {view === "mine" && selectedPicks[fight.id] && (
+              <MethodPredictionPicker
+                pick={selectedPicks[fight.id]}
+                isLocked={locked}
+                onChange={(updatedPick) => {
+                  setSelectedPicks((current) => ({
+                    ...current,
+                    [fight.id]: updatedPick,
+                  }));
+                }}
               />
             )}
           </div>
@@ -403,4 +407,117 @@ function getInitials(name: string) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
 
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+function MethodPredictionPicker({
+  pick,
+  isLocked,
+  onChange,
+}: {
+  pick: PickDraft;
+  isLocked: boolean;
+  onChange: (pick: PickDraft) => void;
+}) {
+  const method = pick.method;
+  const roundsEnabled = method === "KO_TKO" || method === "SUBMISSION";
+
+  function selectMethod(nextMethod: "DECISION" | "KO_TKO" | "SUBMISSION") {
+    if (isLocked) return;
+
+    if (nextMethod === "DECISION") {
+      onChange({
+        ...pick,
+        method: nextMethod,
+        round: undefined,
+      });
+
+      return;
+    }
+
+    onChange({
+      ...pick,
+      method: nextMethod,
+    });
+  }
+
+  function selectRound(round: number) {
+    if (isLocked || !roundsEnabled) return;
+
+    onChange({
+      ...pick,
+      round,
+    });
+  }
+
+  return (
+    <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <PredictionButton
+            label="DEC"
+            active={method === "DECISION"}
+            disabled={isLocked}
+            onClick={() => selectMethod("DECISION")}
+          />
+
+          <PredictionButton
+            label="KO/TKO"
+            active={method === "KO_TKO"}
+            disabled={isLocked}
+            onClick={() => selectMethod("KO_TKO")}
+          />
+
+          <PredictionButton
+            label="SUB"
+            active={method === "SUBMISSION"}
+            disabled={isLocked}
+            onClick={() => selectMethod("SUBMISSION")}
+          />
+        </div>
+
+        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+          {[1, 2, 3, 4, 5].map((round) => (
+            <PredictionButton
+              key={round}
+              label={`R${round}`}
+              active={pick.round === round && roundsEnabled}
+              disabled={isLocked || !roundsEnabled}
+              onClick={() => selectRound(round)}
+              compact
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PredictionButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  compact = false,
+}: {
+  label: string;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded-xl font-black transition ${
+        compact ? "px-2.5 py-2 text-xs" : "px-4 py-2 text-sm"
+      } ${
+        active
+          ? "bg-blue-600 text-white shadow-sm"
+          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+      } ${disabled ? "cursor-default opacity-35 hover:bg-neutral-100" : ""}`}
+    >
+      {label}
+    </button>
+  );
 }

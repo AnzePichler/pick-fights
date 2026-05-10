@@ -6,14 +6,31 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+const pickMethodSchema = z.enum(["KO_TKO", "SUBMISSION", "DECISION"]);
+
 const submitPicksSchema = z.object({
   eventId: z.string().min(1),
   choices: z
     .array(
-      z.object({
-        fightId: z.string().min(1),
-        pickedFighterId: z.string().min(1),
-      }),
+      z
+        .object({
+          fightId: z.string().min(1),
+          pickedFighterId: z.string().min(1),
+          pickedMethod: pickMethodSchema.nullable().optional(),
+          pickedRound: z.number().int().min(1).max(5).nullable().optional(),
+        })
+        .transform((choice) => {
+          const pickedMethod = choice.pickedMethod ?? null;
+
+          return {
+            ...choice,
+            pickedMethod,
+            pickedRound:
+              pickedMethod === "KO_TKO" || pickedMethod === "SUBMISSION"
+                ? (choice.pickedRound ?? null)
+                : null,
+          };
+        }),
     )
     .min(1),
 });
@@ -209,7 +226,8 @@ export async function POST(request: Request) {
           create: choices.map((choice) => ({
             fightId: choice.fightId,
             pickedFighterId: choice.pickedFighterId,
-            pickedMethod: "DECISION",
+            pickedMethod: choice.pickedMethod,
+            pickedRound: choice.pickedRound,
           })),
         },
       },

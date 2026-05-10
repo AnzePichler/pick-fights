@@ -50,6 +50,8 @@ export default async function PicksPage({ searchParams }: PageProps) {
             select: {
               status: true,
               winnerFighterId: true,
+              method: true,
+              round: true,
             },
           },
         },
@@ -95,6 +97,8 @@ export default async function PicksPage({ searchParams }: PageProps) {
     for (const choice of existingSubmission.choices) {
       initialPicks[choice.fightId] = {
         fighterId: choice.pickedFighterId,
+        method: choice.pickedMethod ?? undefined,
+        round: choice.pickedRound ?? undefined,
       };
     }
   }
