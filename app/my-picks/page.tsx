@@ -181,6 +181,22 @@ export default async function MyPicksPage() {
         rarityMultiplier,
       });
 
+      const methodState = getMethodPredictionState({
+        isCorrectWinner: isCorrect,
+        pickedMethod: choice.pickedMethod,
+        resultMethod: fight.result?.method ?? null,
+        resultStatus: fight.result?.status ?? null,
+      });
+
+      const roundState = getRoundPredictionState({
+        isCorrectWinner: isCorrect,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
+        resultMethod: fight.result?.method ?? null,
+        resultRound: fight.result?.round ?? null,
+        resultStatus: fight.result?.status ?? null,
+      });
+
       points += pickPoints;
 
       return {
@@ -195,6 +211,12 @@ export default async function MyPicksPage() {
         points: pickPoints,
         pickedMethod: choice.pickedMethod,
         pickedRound: choice.pickedRound,
+
+        rarityMultiplier,
+        winnerPickCount: stats.winnerPickCount,
+        totalPickCount: stats.totalPickCount,
+        methodState,
+        roundState,
       };
     });
 
@@ -290,21 +312,22 @@ export default async function MyPicksPage() {
                               {pick.pickedFighter.name}
                             </div>
 
-                            {pick.pickedMethod && (
-                              <div className="mt-1 text-xs font-bold text-neutral-400">
-                                Prediction: {formatMethod(pick.pickedMethod)}
-                                {pick.pickedRound
-                                  ? ` · R${pick.pickedRound}`
-                                  : ""}
-                              </div>
-                            )}
+                            <PredictionBreakdown
+                              pickedMethod={pick.pickedMethod}
+                              pickedRound={pick.pickedRound}
+                              methodState={pick.methodState}
+                              roundState={pick.roundState}
+                            />
                           </div>
                         </div>
 
                         <div className="flex shrink-0 items-center gap-2">
-                          <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-black text-neutral-700">
-                            {pick.points} pts
-                          </span>
+                          <PickPointsBreakdown
+                            points={pick.points}
+                            rarityMultiplier={pick.rarityMultiplier}
+                            winnerPickCount={pick.winnerPickCount}
+                            totalPickCount={pick.totalPickCount}
+                          />
 
                           <ResultLabel state={pick.resultState} />
                         </div>
@@ -462,4 +485,162 @@ function formatMethod(method: "KO_TKO" | "SUBMISSION" | "DECISION") {
   if (method === "KO_TKO") return "KO/TKO";
   if (method === "SUBMISSION") return "SUB";
   return "DEC";
+}
+
+type PredictionState =
+  | "correct"
+  | "wrong"
+  | "missing"
+  | "not_counted"
+  | "not_applicable"
+  | "pending";
+
+function PredictionBreakdown({
+  pickedMethod,
+  pickedRound,
+  methodState,
+  roundState,
+}: {
+  pickedMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  pickedRound: number | null;
+  methodState: PredictionState;
+  roundState: PredictionState;
+}) {
+  if (!pickedMethod) {
+    return (
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        <MiniBadge label="No method pick" state="missing" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      <MiniBadge
+        label={`Method: ${formatMethod(pickedMethod)}`}
+        state={methodState}
+      />
+
+      {(pickedMethod === "KO_TKO" || pickedMethod === "SUBMISSION") && (
+        <MiniBadge
+          label={pickedRound ? `Round: R${pickedRound}` : "No round"}
+          state={roundState}
+        />
+      )}
+    </div>
+  );
+}
+
+function PickPointsBreakdown({
+  points,
+  rarityMultiplier,
+}: {
+  points: number;
+  rarityMultiplier: number;
+  winnerPickCount: number;
+  totalPickCount: number;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {points > 0 && (
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${
+            rarityMultiplier > 1
+              ? "bg-blue-100 text-blue-700"
+              : "bg-neutral-100 text-neutral-500"
+          }`}
+        >
+          ×{formatMultiplier(rarityMultiplier)}
+        </span>
+      )}
+
+      <span className="rounded-full bg-neutral-100 px-3 py-1 text-xs font-black text-neutral-700">
+        {points} pts
+      </span>
+    </div>
+  );
+}
+
+function MiniBadge({
+  label,
+  state,
+}: {
+  label: string;
+  state: PredictionState;
+}) {
+  const className =
+    state === "correct"
+      ? "bg-green-100 text-green-700"
+      : state === "wrong"
+        ? "bg-red-100 text-red-700"
+        : state === "missing"
+          ? "bg-neutral-100 text-neutral-500"
+          : state === "pending"
+            ? "bg-blue-100 text-blue-700"
+            : "bg-neutral-100 text-neutral-400";
+
+  const suffix = state === "correct" ? " ✓" : state === "wrong" ? " ✕" : "";
+
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wider ${className}`}
+    >
+      {label}
+      {suffix}
+    </span>
+  );
+}
+
+function getMethodPredictionState({
+  isCorrectWinner,
+  pickedMethod,
+  resultMethod,
+  resultStatus,
+}: {
+  isCorrectWinner: boolean;
+  pickedMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  resultMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  resultStatus: string | null;
+}): PredictionState {
+  if (!resultStatus || resultStatus === "PENDING") return "pending";
+  if (!isCorrectWinner) return "not_counted";
+  if (!pickedMethod) return "missing";
+  if (!resultMethod) return "not_applicable";
+
+  return pickedMethod === resultMethod ? "correct" : "wrong";
+}
+
+function getRoundPredictionState({
+  isCorrectWinner,
+  pickedMethod,
+  pickedRound,
+  resultMethod,
+  resultRound,
+  resultStatus,
+}: {
+  isCorrectWinner: boolean;
+  pickedMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  pickedRound: number | null;
+  resultMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  resultRound: number | null;
+  resultStatus: string | null;
+}): PredictionState {
+  if (!resultStatus || resultStatus === "PENDING") return "pending";
+  if (!isCorrectWinner) return "not_counted";
+
+  const resultHasRound =
+    resultMethod === "KO_TKO" || resultMethod === "SUBMISSION";
+
+  if (!resultHasRound) return "not_applicable";
+  if (pickedMethod !== resultMethod) return "not_counted";
+  if (!pickedRound) return "missing";
+  if (!resultRound) return "not_applicable";
+
+  return pickedRound === resultRound ? "correct" : "wrong";
+}
+
+function formatMultiplier(multiplier: number) {
+  return Number.isInteger(multiplier)
+    ? multiplier.toFixed(0)
+    : multiplier.toFixed(2).replace(/0$/, "");
 }
