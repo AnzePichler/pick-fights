@@ -37,23 +37,36 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const scope: Scope = params?.scope === "alltime" ? "alltime" : "event";
 
-  const activeEvent = await prisma.event.findFirst({
+  const leaderboardEvent = await prisma.event.findFirst({
     where: {
-      isActive: true,
-      status: "OPEN",
+      slug: {
+        not: "ufc-test",
+      },
+      status: {
+        in: ["OPEN", "LOCKED", "COMPLETED"],
+      },
     },
+    orderBy: [
+      {
+        isActive: "desc",
+      },
+      {
+        startsAt: "desc",
+      },
+    ],
     select: {
       id: true,
       name: true,
+      status: true,
     },
   });
 
   const rows =
     scope === "event"
-      ? activeEvent
+      ? leaderboardEvent
         ? await getLeaderboardRows({
             scope,
-            eventId: activeEvent.id,
+            eventId: leaderboardEvent.id,
           })
         : []
       : await getLeaderboardRows({
@@ -75,10 +88,10 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
 
                 <p className="mt-2 text-sm font-semibold text-neutral-500">
                   {scope === "event"
-                    ? activeEvent
-                      ? `Current event: ${activeEvent.name}`
-                      : "No active event selected."
-                    : "All-time points across every event."}
+                    ? leaderboardEvent
+                      ? `${leaderboardEvent.status === "COMPLETED" ? "Last event" : "Current event"}: ${leaderboardEvent.name}`
+                      : "No event selected."
+                    : "All-time points across completed events."}
                 </p>
               </div>
 
