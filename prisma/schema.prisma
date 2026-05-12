@@ -24,6 +24,12 @@ enum PickMethod {
   DECISION
 }
 
+enum FightStatus {
+  ACTIVE
+  CANCELLED
+  REPLACED
+}
+
 enum FightMethod {
   KO_TKO
   SUBMISSION
@@ -93,13 +99,14 @@ model Fighter {
 }
 
 model Fight {
-  id         String   @id @default(cuid())
+  id         String      @id @default(cuid())
   eventId    String
   fighterAId String
   fighterBId String
   order      Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
+  status     FightStatus @default(ACTIVE)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now()) @updatedAt
 
   event    Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   fighterA Fighter      @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)
@@ -109,6 +116,7 @@ model Fight {
 
   @@unique([eventId, order])
   @@index([eventId])
+  @@index([eventId, status])
   @@index([fighterAId])
   @@index([fighterBId])
 }

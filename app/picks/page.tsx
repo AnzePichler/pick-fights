@@ -43,6 +43,9 @@ export default async function PicksPage({ searchParams }: PageProps) {
     },
     include: {
       fights: {
+        where: {
+          status: "ACTIVE",
+        },
         include: {
           fighterA: true,
           fighterB: true,
@@ -103,15 +106,39 @@ export default async function PicksPage({ searchParams }: PageProps) {
     }
   }
 
+  const activeFightIds = new Set(event.fights.map((fight) => fight.id));
+
+  const activeInitialPicks: Record<string, PickDraft> = {};
+
+  for (const [fightId, pick] of Object.entries(initialPicks)) {
+    if (activeFightIds.has(fightId)) {
+      activeInitialPicks[fightId] = pick;
+    }
+  }
+
+  const missingFightIds = event.fights
+    .filter((fight) => !activeInitialPicks[fight.id])
+    .map((fight) => fight.id);
+
+  const hasExistingSubmission = Boolean(existingSubmission);
+  const allActivePicksMade = missingFightIds.length === 0;
+
   const now = new Date();
 
-  const picksAreLocked =
-    Boolean(existingSubmission) ||
-    event.status !== "OPEN" ||
-    event.lockAt.getTime() <= now.getTime();
+  const picksAreClosedByEvent =
+    event.status !== "OPEN" || event.lockAt.getTime() <= now.getTime();
 
-  const canViewOthers = Boolean(existingSubmission);
+  const picksAreLocked =
+    picksAreClosedByEvent || (hasExistingSubmission && allActivePicksMade);
+
+  const canViewOthers = hasExistingSubmission && allActivePicksMade;
   const view = canViewOthers ? requestedView : "mine";
+
+  const editableFightIds = picksAreClosedByEvent
+    ? []
+    : hasExistingSubmission
+      ? missingFightIds
+      : event.fights.map((fight) => fight.id);
 
   const communityPicks: Record<string, FightCommunityPicks> = {};
 
@@ -188,6 +215,19 @@ export default async function PicksPage({ searchParams }: PageProps) {
               <p className="mt-2 text-sm font-semibold text-neutral-500">
                 Everyone&apos;s submitted picks for this event.
               </p>
+            ) : hasExistingSubmission &&
+              missingFightIds.length > 0 &&
+              !picksAreClosedByEvent ? (
+              <p className="mt-2 text-sm font-semibold text-orange-600">
+                The card changed. You have {missingFightIds.length} new{" "}
+                {missingFightIds.length === 1 ? "pick" : "picks"} to make.
+              </p>
+            ) : hasExistingSubmission &&
+              missingFightIds.length > 0 &&
+              picksAreClosedByEvent ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                The card changed, but picks are now closed for this event.
+              </p>
             ) : existingSubmission ? (
               <p className="mt-2 text-sm font-semibold text-neutral-500">
                 Your picks are submitted and locked. You can still open each
@@ -208,7 +248,8 @@ export default async function PicksPage({ searchParams }: PageProps) {
           <FightAccordion
             eventId={event.id}
             fights={event.fights}
-            initialPicks={initialPicks}
+            initialPicks={activeInitialPicks}
+            editableFightIds={editableFightIds}
             isLocked={picksAreLocked}
             view={view}
             canViewOthers={canViewOthers}

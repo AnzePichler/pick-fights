@@ -24,6 +24,7 @@ type Props = {
   eventId: string;
   fights: Fight[];
   initialPicks?: Record<string, PickDraft>;
+  editableFightIds?: string[];
   isLocked?: boolean;
   view?: "mine" | "others";
   canViewOthers?: boolean;
@@ -34,6 +35,7 @@ export default function FightAccordion({
   eventId,
   fights,
   initialPicks = {},
+  editableFightIds,
   isLocked = false,
   view = "mine",
   canViewOthers = false,
@@ -47,8 +49,21 @@ export default function FightAccordion({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
+  const editableFightIdSet = new Set(
+    editableFightIds ?? fights.map((fight) => fight.id),
+  );
+
+  const totalFights = fights.length;
+  const pickedCount = fights.filter((fight) => selectedPicks[fight.id]).length;
+  const allPicksMade = pickedCount === totalFights;
+  const locked = isLocked || hasSubmitted;
+
+  function isFightLocked(fightId: string) {
+    return locked || view === "others" || !editableFightIdSet.has(fightId);
+  }
+
   function selectFighter(fightId: string, fighterId: string) {
-    if (isLocked || hasSubmitted || isSubmitting || view === "others") {
+    if (isSubmitting || isFightLocked(fightId)) {
       return;
     }
 
@@ -71,16 +86,18 @@ export default function FightAccordion({
   }
 
   async function submitPicks() {
-    if (isLocked || hasSubmitted || isSubmitting || view === "others") {
+    if (isSubmitting || view === "others") {
       return;
     }
 
-    const choices = Object.entries(selectedPicks).map(([fightId, pick]) => ({
-      fightId,
-      pickedFighterId: pick.fighterId,
-      pickedMethod: pick.method ?? null,
-      pickedRound: pick.round ?? null,
-    }));
+    const choices = Object.entries(selectedPicks)
+      .filter(([fightId]) => editableFightIdSet.has(fightId))
+      .map(([fightId, pick]) => ({
+        fightId,
+        pickedFighterId: pick.fighterId,
+        pickedMethod: pick.method ?? null,
+        pickedRound: pick.round ?? null,
+      }));
 
     setIsSubmitting(true);
 
@@ -114,11 +131,6 @@ export default function FightAccordion({
     }
   }
 
-  const totalFights = fights.length;
-  const pickedCount = Object.keys(selectedPicks).length;
-  const allPicksMade = pickedCount === totalFights;
-  const locked = isLocked || hasSubmitted;
-
   return (
     <>
       <div className="space-y-5 pb-32">
@@ -132,13 +144,14 @@ export default function FightAccordion({
                   : selectedPicks[fight.id]?.fighterId
               }
               onSelectFighter={selectFighter}
-              isLocked={locked || view === "others"}
+              isLocked={isFightLocked(fight.id)}
             />
 
             {view === "mine" && selectedPicks[fight.id] && (
               <MethodPredictionPicker
                 pick={selectedPicks[fight.id]}
-                isLocked={locked}
+                result={fight.result}
+                isLocked={isFightLocked(fight.id)}
                 onChange={(updatedPick) => {
                   setSelectedPicks((current) => ({
                     ...current,
@@ -411,25 +424,33 @@ function Avatar({ user }: { user: CommunityPickUser }) {
   );
 }
 
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-}
 function MethodPredictionPicker({
   pick,
+  result,
   isLocked,
   onChange,
 }: {
   pick: PickDraft;
+  result?: {
+    status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
+    winnerFighterId: string | null;
+    method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+    round: number | null;
+  } | null;
   isLocked: boolean;
   onChange: (pick: PickDraft) => void;
 }) {
   const method = pick.method;
   const roundsEnabled = method === "KO_TKO" || method === "SUBMISSION";
+
+  const resultHasWinner = result?.status === "WINNER";
+  const pickedWinnerIsCorrect =
+    resultHasWinner && result.winnerFighterId === pick.fighterId;
+
+  const shouldShowResultState = resultHasWinner && pickedWinnerIsCorrect;
+
+  const resultMethod = shouldShowResultState ? result.method : null;
+  const resultRound = shouldShowResultState ? result.round : null;
 
   function selectMethod(nextMethod: "DECISION" | "KO_TKO" | "SUBMISSION") {
     if (isLocked) return;
@@ -465,21 +486,36 @@ function MethodPredictionPicker({
         <div className="flex flex-wrap gap-2">
           <PredictionButton
             label="DEC"
-            active={method === "DECISION"}
+            state={getMethodButtonState({
+              buttonMethod: "DECISION",
+              pickedMethod: method,
+              resultMethod,
+              shouldShowResultState,
+            })}
             disabled={isLocked}
             onClick={() => selectMethod("DECISION")}
           />
 
           <PredictionButton
             label="KO/TKO"
-            active={method === "KO_TKO"}
+            state={getMethodButtonState({
+              buttonMethod: "KO_TKO",
+              pickedMethod: method,
+              resultMethod,
+              shouldShowResultState,
+            })}
             disabled={isLocked}
             onClick={() => selectMethod("KO_TKO")}
           />
 
           <PredictionButton
             label="SUB"
-            active={method === "SUBMISSION"}
+            state={getMethodButtonState({
+              buttonMethod: "SUBMISSION",
+              pickedMethod: method,
+              resultMethod,
+              shouldShowResultState,
+            })}
             disabled={isLocked}
             onClick={() => selectMethod("SUBMISSION")}
           />
@@ -490,7 +526,14 @@ function MethodPredictionPicker({
             <PredictionButton
               key={round}
               label={`R${round}`}
-              active={pick.round === round && roundsEnabled}
+              state={getRoundButtonState({
+                buttonRound: round,
+                pickedMethod: method,
+                pickedRound: pick.round,
+                resultMethod,
+                resultRound,
+                shouldShowResultState,
+              })}
               disabled={isLocked || !roundsEnabled}
               onClick={() => selectRound(round)}
               compact
@@ -502,19 +545,113 @@ function MethodPredictionPicker({
   );
 }
 
+type PredictionButtonState =
+  | "default"
+  | "selected"
+  | "correct"
+  | "wrong"
+  | "answer";
+
+function getMethodButtonState({
+  buttonMethod,
+  pickedMethod,
+  resultMethod,
+  shouldShowResultState,
+}: {
+  buttonMethod: "DECISION" | "KO_TKO" | "SUBMISSION";
+  pickedMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | undefined;
+  resultMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | null;
+  shouldShowResultState: boolean;
+}): PredictionButtonState {
+  const isPicked = pickedMethod === buttonMethod;
+  const isCorrectAnswer = resultMethod === buttonMethod;
+
+  if (!shouldShowResultState || !resultMethod) {
+    return isPicked ? "selected" : "default";
+  }
+
+  if (isPicked && isCorrectAnswer) {
+    return "correct";
+  }
+
+  if (isPicked && !isCorrectAnswer) {
+    return "wrong";
+  }
+
+  if (!isPicked && isCorrectAnswer) {
+    return "answer";
+  }
+
+  return "default";
+}
+
+function getRoundButtonState({
+  buttonRound,
+  pickedMethod,
+  pickedRound,
+  resultMethod,
+  resultRound,
+  shouldShowResultState,
+}: {
+  buttonRound: number;
+  pickedMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | undefined;
+  pickedRound: number | undefined;
+  resultMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | null;
+  resultRound: number | null;
+  shouldShowResultState: boolean;
+}): PredictionButtonState {
+  const methodUsesRound =
+    pickedMethod === "KO_TKO" || pickedMethod === "SUBMISSION";
+
+  const resultUsesRound =
+    resultMethod === "KO_TKO" || resultMethod === "SUBMISSION";
+
+  const isPicked = methodUsesRound && pickedRound === buttonRound;
+  const isCorrectAnswer = resultUsesRound && resultRound === buttonRound;
+
+  if (!shouldShowResultState || !resultUsesRound || !resultRound) {
+    return isPicked ? "selected" : "default";
+  }
+
+  if (isPicked && isCorrectAnswer) {
+    return "correct";
+  }
+
+  if (isPicked && !isCorrectAnswer) {
+    return "wrong";
+  }
+
+  if (!isPicked && isCorrectAnswer) {
+    return "answer";
+  }
+
+  return "default";
+}
+
 function PredictionButton({
   label,
-  active,
+  state,
   disabled,
   onClick,
   compact = false,
 }: {
   label: string;
-  active: boolean;
+  state: PredictionButtonState;
   disabled: boolean;
   onClick: () => void;
   compact?: boolean;
 }) {
+  const stateClass =
+    state === "correct"
+      ? "bg-green-600 text-white shadow-sm"
+      : state === "wrong"
+        ? "bg-red-600 text-white shadow-sm"
+        : state === "answer"
+          ? "bg-neutral-300 text-neutral-800"
+          : state === "selected"
+            ? "bg-blue-600 text-white shadow-sm"
+            : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200";
+
   return (
     <button
       type="button"
@@ -522,13 +659,18 @@ function PredictionButton({
       onClick={onClick}
       className={`rounded-xl font-black transition ${
         compact ? "px-2.5 py-2 text-xs" : "px-4 py-2 text-sm"
-      } ${
-        active
-          ? "bg-blue-600 text-white shadow-sm"
-          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-      } ${disabled ? "cursor-default opacity-35 hover:bg-neutral-100" : ""}`}
+      } ${stateClass} ${disabled ? "cursor-default opacity-100" : ""}`}
     >
       {label}
     </button>
   );
+}
+
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }

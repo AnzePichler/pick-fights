@@ -22,6 +22,7 @@ export type Fight = {
   fighterAId: string;
   fighterBId: string;
   order: number;
+  status: "ACTIVE" | "CANCELLED" | "REPLACED";
   fighterA: Fighter;
   fighterB: Fighter;
   result?: {

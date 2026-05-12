@@ -78,6 +78,9 @@ export async function POST(request: Request) {
         status: true,
         lockAt: true,
         fights: {
+          where: {
+            status: "ACTIVE",
+          },
           select: {
             id: true,
             fighterAId: true,
@@ -99,6 +102,7 @@ export async function POST(request: Request) {
     }
 
     const isTestEvent = event.slug === "ufc-test" && event.status === "DRAFT";
+
     if (!isTestEvent && event.status !== "OPEN") {
       return NextResponse.json(
         {
@@ -124,7 +128,7 @@ export async function POST(request: Request) {
     if (event.fights.length === 0) {
       return NextResponse.json(
         {
-          error: "This event has no fights.",
+          error: "This event has no active fights.",
         },
         {
           status: 400,
@@ -141,20 +145,13 @@ export async function POST(request: Request) {
       },
       select: {
         id: true,
+        choices: {
+          select: {
+            fightId: true,
+          },
+        },
       },
     });
-
-    if (existingSubmission) {
-      return NextResponse.json(
-        {
-          error:
-            "You already submitted picks for this event. Picks are locked.",
-        },
-        {
-          status: 409,
-        },
-      );
-    }
 
     const fightsById = new Map(
       event.fights.map((fight) => {
@@ -175,10 +172,33 @@ export async function POST(request: Request) {
       );
     }
 
-    if (choices.length !== event.fights.length) {
+    const existingPickedFightIds = new Set(
+      existingSubmission?.choices.map((choice) => choice.fightId) ?? [],
+    );
+
+    const requiredFightIds = event.fights
+      .map((fight) => fight.id)
+      .filter((fightId) => !existingPickedFightIds.has(fightId));
+
+    if (requiredFightIds.length === 0) {
       return NextResponse.json(
         {
-          error: "You must pick every fight before submitting.",
+          error: "You already submitted all current fights for this event.",
+        },
+        {
+          status: 409,
+        },
+      );
+    }
+
+    const requiredFightIdSet = new Set(requiredFightIds);
+
+    if (choices.length !== requiredFightIds.length) {
+      return NextResponse.json(
+        {
+          error: existingSubmission
+            ? "You must pick every new fight before submitting."
+            : "You must pick every fight before submitting.",
         },
         {
           status: 400,
@@ -187,13 +207,25 @@ export async function POST(request: Request) {
     }
 
     for (const choice of choices) {
+      if (!requiredFightIdSet.has(choice.fightId)) {
+        return NextResponse.json(
+          {
+            error:
+              "You can only submit picks for fights you have not picked yet.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
+
       const fight = fightsById.get(choice.fightId);
 
       if (!fight) {
         return NextResponse.json(
           {
             error:
-              "One of your picks is for a fight that is not in this event.",
+              "One of your picks is for a fight that is not active in this event.",
           },
           {
             status: 400,
@@ -217,32 +249,54 @@ export async function POST(request: Request) {
       }
     }
 
-    const submission = await prisma.pickSubmission.create({
-      data: {
-        userId,
-        eventId,
-        isLocked: true,
-        choices: {
-          create: choices.map((choice) => ({
-            fightId: choice.fightId,
-            pickedFighterId: choice.pickedFighterId,
-            pickedMethod: choice.pickedMethod,
-            pickedRound: choice.pickedRound,
-          })),
-        },
-      },
-      select: {
-        id: true,
-        submittedAt: true,
-      },
-    });
+    const submission = existingSubmission
+      ? await prisma.$transaction(async (tx) => {
+          await tx.pickChoice.createMany({
+            data: choices.map((choice) => ({
+              submissionId: existingSubmission.id,
+              fightId: choice.fightId,
+              pickedFighterId: choice.pickedFighterId,
+              pickedMethod: choice.pickedMethod,
+              pickedRound: choice.pickedRound,
+            })),
+          });
+
+          return tx.pickSubmission.findUniqueOrThrow({
+            where: {
+              id: existingSubmission.id,
+            },
+            select: {
+              id: true,
+              submittedAt: true,
+            },
+          });
+        })
+      : await prisma.pickSubmission.create({
+          data: {
+            userId,
+            eventId,
+            isLocked: true,
+            choices: {
+              create: choices.map((choice) => ({
+                fightId: choice.fightId,
+                pickedFighterId: choice.pickedFighterId,
+                pickedMethod: choice.pickedMethod,
+                pickedRound: choice.pickedRound,
+              })),
+            },
+          },
+          select: {
+            id: true,
+            submittedAt: true,
+          },
+        });
 
     return NextResponse.json(
       {
         submission,
       },
       {
-        status: 201,
+        status: existingSubmission ? 200 : 201,
       },
     );
   } catch (error) {
@@ -253,7 +307,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "You already submitted picks for this event. Picks are locked.",
+            "You already submitted one of these picks. Please refresh the page.",
         },
         {
           status: 409,
