@@ -9,6 +9,8 @@ import type { PickDraft } from "@/types/types";
 
 export const dynamic = "force-dynamic";
 
+const TEST_EVENT_SLUG = "ufc-fight-night-may-30-2026";
+
 type PageProps = {
   searchParams?: Promise<{
     view?: string;
@@ -39,10 +41,13 @@ export default async function TestEventPage({ searchParams }: PageProps) {
 
   const event = await prisma.event.findUnique({
     where: {
-      slug: "ufc-328",
+      slug: TEST_EVENT_SLUG,
     },
     include: {
       fights: {
+        where: {
+          status: "ACTIVE",
+        },
         include: {
           fighterA: true,
           fighterB: true,
@@ -72,7 +77,7 @@ export default async function TestEventPage({ searchParams }: PageProps) {
             <h1 className="text-3xl font-black">No test event found.</h1>
             <p className="mt-2 text-neutral-500">
               Create an event in Prisma Studio with slug{" "}
-              <span className="font-black">test-event</span>, status{" "}
+              <span className="font-black">{TEST_EVENT_SLUG}</span>, status{" "}
               <span className="font-black">DRAFT</span>, and isActive{" "}
               <span className="font-black">false</span>.
             </p>
@@ -100,13 +105,49 @@ export default async function TestEventPage({ searchParams }: PageProps) {
     for (const choice of existingSubmission.choices) {
       initialPicks[choice.fightId] = {
         fighterId: choice.pickedFighterId,
+        method: choice.pickedMethod ?? undefined,
+        round: choice.pickedRound ?? undefined,
       };
     }
   }
 
-  const picksAreLocked = Boolean(existingSubmission);
-  const canViewOthers = Boolean(existingSubmission);
+  const activeFightIds = new Set(event.fights.map((fight) => fight.id));
+
+  const activeInitialPicks: Record<string, PickDraft> = {};
+
+  for (const [fightId, pick] of Object.entries(initialPicks)) {
+    if (activeFightIds.has(fightId)) {
+      activeInitialPicks[fightId] = pick;
+    }
+  }
+
+  const missingFightIds = event.fights
+    .filter((fight) => !activeInitialPicks[fight.id])
+    .map((fight) => fight.id);
+
+  const hasExistingSubmission = Boolean(existingSubmission);
+  const allActivePicksMade = missingFightIds.length === 0;
+
+  const isTestDraftEvent =
+    event.slug === TEST_EVENT_SLUG && event.status === "DRAFT";
+
+  const now = new Date();
+
+  const picksAreClosedByEvent =
+    !isTestDraftEvent &&
+    (event.status !== "OPEN" || event.lockAt.getTime() <= now.getTime());
+
+  const picksAreLocked =
+    picksAreClosedByEvent || (hasExistingSubmission && allActivePicksMade);
+
+  const canViewOthers = hasExistingSubmission && allActivePicksMade;
   const view = canViewOthers ? requestedView : "mine";
+
+  const editableFightIds = picksAreClosedByEvent
+    ? []
+    : hasExistingSubmission
+      ? missingFightIds
+      : event.fights.map((fight) => fight.id);
 
   const communityPicks: Record<string, FightCommunityPicks> = {};
 
@@ -187,14 +228,32 @@ export default async function TestEventPage({ searchParams }: PageProps) {
               <p className="mt-2 text-sm font-semibold text-neutral-500">
                 Everyone&apos;s submitted picks for this dummy event.
               </p>
+            ) : hasExistingSubmission &&
+              missingFightIds.length > 0 &&
+              !picksAreClosedByEvent ? (
+              <p className="mt-2 text-sm font-semibold text-orange-600">
+                The test card changed. You have {missingFightIds.length} new{" "}
+                {missingFightIds.length === 1 ? "pick" : "picks"} to make.
+              </p>
+            ) : hasExistingSubmission &&
+              missingFightIds.length > 0 &&
+              picksAreClosedByEvent ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                The test card changed, but picks are closed.
+              </p>
             ) : existingSubmission ? (
               <p className="mt-2 text-sm font-semibold text-neutral-500">
-                Your dummy picks are submitted and locked.
+                Your dummy picks are submitted and locked. Add a new ACTIVE
+                fight in Prisma Studio to test missing picks.
+              </p>
+            ) : picksAreLocked ? (
+              <p className="mt-2 text-sm font-semibold text-neutral-500">
+                Picks are closed for this test event.
               </p>
             ) : (
               <p className="mt-2 text-sm font-semibold text-neutral-500">
-                This is a safe DRAFT test event. It does not replace the real
-                active event.
+                Submit picks here, then add a new ACTIVE fight in Prisma Studio
+                to test card changes.
               </p>
             )}
 
@@ -218,7 +277,8 @@ export default async function TestEventPage({ searchParams }: PageProps) {
           <FightAccordion
             eventId={event.id}
             fights={event.fights}
-            initialPicks={initialPicks}
+            initialPicks={activeInitialPicks}
+            editableFightIds={editableFightIds}
             isLocked={picksAreLocked}
             view={view}
             canViewOthers={canViewOthers}

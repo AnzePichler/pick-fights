@@ -99,25 +99,37 @@ export default function FightCard({
       )}
 
       <details className="relative overflow-hidden rounded-[1.5rem] bg-white shadow-sm transition md:rounded-[1.85rem]">
-        <summary className="cursor-pointer list-none px-3 py-4 md:px-5 md:py-5">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:gap-4">
-            <FighterSide
-              fighter={fight.fighterA}
-              align="left"
-              onSelect={() => onSelectFighter(fight.id, fight.fighterA.id)}
-              isLocked={isLocked}
-            />
+        <summary className="relative cursor-pointer list-none px-3 py-4 md:px-5 md:py-5">
+          <div className="pointer-events-none absolute left-1/2 top-3 z-20 w-[150px] -translate-x-1/2 text-center md:top-4 md:w-[220px]">
+            {fight.weightClass && (
+              <div className="mb-1 truncate text-[9px] font-black tracking-[0.22em] text-neutral-400 md:mb-2 md:text-xs">
+                {formatWeightClass(fight.weightClass)}
+              </div>
+            )}
 
-            <div className="px-1 text-xs font-black text-gray-400 md:text-sm">
+            <div className="mt-16 text-xs font-black text-gray-400 md:text-sm">
               VS
             </div>
+          </div>
 
-            <FighterSide
-              fighter={fight.fighterB}
-              align="right"
-              onSelect={() => onSelectFighter(fight.id, fight.fighterB.id)}
-              isLocked={isLocked}
-            />
+          <div className="grid grid-cols-2 items-center gap-8 md:gap-20">
+            <div className="min-w-0">
+              <FighterSide
+                fighter={fight.fighterA}
+                align="left"
+                onSelect={() => onSelectFighter(fight.id, fight.fighterA.id)}
+                isLocked={isLocked}
+              />
+            </div>
+
+            <div className="min-w-0">
+              <FighterSide
+                fighter={fight.fighterB}
+                align="right"
+                onSelect={() => onSelectFighter(fight.id, fight.fighterB.id)}
+                isLocked={isLocked}
+              />
+            </div>
           </div>
         </summary>
 
@@ -294,7 +306,7 @@ function ComparisonRow({
         {displayValue(left)}
       </div>
 
-      <div className="text-center text-[10px] font-bold text-neutral-500 md:text-md">
+      <div className="text-center text-[10px] font-bold text-neutral-500 md:text-sm">
         {label}
       </div>
 
@@ -364,4 +376,62 @@ function formatFeetInches(value: string | null) {
     : inches.toFixed(1);
 
   return `${feet}' ${formattedInches}"`;
+}
+
+function formatWeightClass(value: string) {
+  const normalized = value
+    .toLowerCase()
+    .replace(/women'?s/g, "")
+    .replace(/men'?s/g, "")
+    .replace(/bout/g, "")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized.includes("strawweight")) {
+    return "strawweight";
+  }
+
+  if (normalized.includes("flyweight")) {
+    return "flyweight";
+  }
+
+  if (normalized.includes("bantamweight")) {
+    return "bantamweight";
+  }
+
+  if (normalized.includes("featherweight")) {
+    return "featherweight";
+  }
+
+  if (
+    normalized.includes("light heavyweight") ||
+    normalized.includes("lightheavyweight")
+  ) {
+    return "lightheavyweight";
+  }
+
+  if (normalized.includes("lightweight")) {
+    return "lightweight";
+  }
+
+  if (normalized.includes("welterweight")) {
+    return "welterweight";
+  }
+
+  if (normalized.includes("middleweight")) {
+    return "middleweight";
+  }
+
+  if (normalized.includes("heavyweight")) {
+    return "heavyweight";
+  }
+
+  return value
+    .replace(/women'?s/gi, "")
+    .replace(/men'?s/gi, "")
+    .replace(/bout/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }

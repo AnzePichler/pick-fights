@@ -99,14 +99,15 @@ model Fighter {
 }
 
 model Fight {
-  id         String      @id @default(cuid())
-  eventId    String
-  fighterAId String
-  fighterBId String
-  order      Int
-  status     FightStatus @default(ACTIVE)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @default(now()) @updatedAt
+  id          String      @id @default(cuid())
+  eventId     String
+  fighterAId  String
+  fighterBId  String
+  order       Int
+  status      FightStatus @default(ACTIVE)
+  weightClass String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
 
   event    Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   fighterA Fighter      @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)

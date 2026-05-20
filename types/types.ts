@@ -21,6 +21,7 @@ export type Fight = {
   eventId: string;
   fighterAId: string;
   fighterBId: string;
+  weightClass: string | null;
   order: number;
   status: "ACTIVE" | "CANCELLED" | "REPLACED";
   fighterA: Fighter;
