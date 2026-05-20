@@ -211,7 +211,6 @@ export default async function MyPicksPage() {
         points: pickPoints,
         pickedMethod: choice.pickedMethod,
         pickedRound: choice.pickedRound,
-
         rarityMultiplier,
         winnerPickCount: stats.winnerPickCount,
         totalPickCount: stats.totalPickCount,
@@ -253,20 +252,27 @@ export default async function MyPicksPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {cards.map((card) => (
-                <div
+            <div className="space-y-5">
+              {cards.map((card, index) => (
+                <details
                   key={card.submissionId}
-                  className="overflow-hidden rounded-3xl bg-white shadow-sm"
+                  open={index === 0}
+                  className="group overflow-hidden rounded-3xl bg-white shadow-sm"
                 >
-                  <div className="border-b border-neutral-100 p-6">
+                  <summary className="cursor-pointer list-none p-6">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <div className="text-xs font-black uppercase tracking-widest text-neutral-400">
-                          {card.event.status}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <div className="text-xs font-black uppercase tracking-widest text-neutral-400">
+                            {card.event.status}
+                          </div>
+
+                          <span className="text-neutral-300 transition group-open:rotate-180">
+                            ▼
+                          </span>
                         </div>
 
-                        <h2 className="mt-1 text-3xl font-black text-neutral-900">
+                        <h2 className="mt-1 truncate text-2xl font-black text-neutral-900 md:text-3xl">
                           {card.event.name}
                         </h2>
 
@@ -291,50 +297,52 @@ export default async function MyPicksPage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  </summary>
 
-                  <div className="divide-y divide-neutral-100">
-                    {card.picks.map((pick) => (
-                      <div
-                        key={pick.id}
-                        className="flex items-center justify-between gap-4 p-4 md:p-5"
-                      >
-                        <div className="flex min-w-0 items-center gap-4">
-                          <ResultIcon state={pick.resultState} />
+                  <div className="border-t border-neutral-100">
+                    <div className="divide-y divide-neutral-100">
+                      {card.picks.map((pick) => (
+                        <div
+                          key={pick.id}
+                          className="flex items-center justify-between gap-4 p-4 md:p-5"
+                        >
+                          <div className="flex min-w-0 items-center gap-4">
+                            <ResultIcon state={pick.resultState} />
 
-                          <FighterAvatar
-                            imageUrl={pick.pickedFighter.imageUrl}
-                            name={pick.pickedFighter.name}
-                          />
-
-                          <div className="min-w-0">
-                            <div className="truncate text-base font-black text-neutral-800 md:text-lg">
-                              {pick.pickedFighter.name}
-                            </div>
-
-                            <PredictionBreakdown
-                              pickedMethod={pick.pickedMethod}
-                              pickedRound={pick.pickedRound}
-                              methodState={pick.methodState}
-                              roundState={pick.roundState}
+                            <FighterAvatar
+                              imageUrl={pick.pickedFighter.imageUrl}
+                              name={pick.pickedFighter.name}
                             />
+
+                            <div className="min-w-0">
+                              <div className="truncate text-base font-black text-neutral-800 md:text-lg">
+                                {pick.pickedFighter.name}
+                              </div>
+
+                              <PredictionBreakdown
+                                pickedMethod={pick.pickedMethod}
+                                pickedRound={pick.pickedRound}
+                                methodState={pick.methodState}
+                                roundState={pick.roundState}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            <PickPointsBreakdown
+                              points={pick.points}
+                              rarityMultiplier={pick.rarityMultiplier}
+                              winnerPickCount={pick.winnerPickCount}
+                              totalPickCount={pick.totalPickCount}
+                            />
+
+                            <ResultLabel state={pick.resultState} />
                           </div>
                         </div>
-
-                        <div className="flex shrink-0 items-center gap-2">
-                          <PickPointsBreakdown
-                            points={pick.points}
-                            rarityMultiplier={pick.rarityMultiplier}
-                            winnerPickCount={pick.winnerPickCount}
-                            totalPickCount={pick.totalPickCount}
-                          />
-
-                          <ResultLabel state={pick.resultState} />
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </details>
               ))}
             </div>
           )}

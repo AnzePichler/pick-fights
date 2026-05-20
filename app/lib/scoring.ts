@@ -18,17 +18,14 @@ export function getRarityMultiplier({
   winnerPickCount: number;
   totalPickCount: number;
 }) {
-  if (totalPickCount <= 0 || winnerPickCount <= 0) {
-    return 1;
-  }
-
   const percentage = (winnerPickCount / totalPickCount) * 100;
 
-  if (percentage >= 50) return 1;
-  if (percentage >= 30) return 1.15;
-  if (percentage >= 15) return 1.3;
+  if (percentage >= 60) return 1;
+  if (percentage >= 40) return 1.15;
+  if (percentage >= 25) return 1.3;
+  if (percentage >= 10) return 1.5;
 
-  return 1.5;
+  return 1.75;
 }
 
 export function getMethodBonus({
