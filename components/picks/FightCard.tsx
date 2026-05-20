@@ -102,12 +102,12 @@ export default function FightCard({
         <summary className="relative cursor-pointer list-none px-3 py-4 md:px-5 md:py-5">
           <div className="pointer-events-none absolute left-1/2 top-3 z-20 w-[150px] -translate-x-1/2 text-center md:top-4 md:w-[220px]">
             {fight.weightClass && (
-              <div className="mb-1 truncate text-[9px] font-black tracking-[0.22em] text-neutral-400 md:mb-2 md:text-xs">
+              <div className="mb-1 truncate capitalize text-[9px] font-semibold tracking-[0.05em] text-[#BDBDBD] md:mb-2 md:text-sm">
                 {formatWeightClass(fight.weightClass)}
               </div>
             )}
 
-            <div className="mt-16 text-xs font-black text-gray-400 md:text-sm">
+            <div className="mt-16 text-xs font-black text-[#BDBDBD] md:text-sm">
               VS
             </div>
           </div>

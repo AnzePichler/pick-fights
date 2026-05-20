@@ -51,7 +51,7 @@ export default function FighterSide({
               className={`inline-flex items-center px-1 text-xs font-black md:text-md ${
                 rankLabel === "C"
                   ? "mb-0.5 bg-[#ba922d] text-white"
-                  : "bg-transparent text-sm text-gray-400 md:text-lg"
+                  : "bg-transparent text-sm text-[#BDBDBD] md:text-lg"
               }`}
             >
               {rankLabel}
