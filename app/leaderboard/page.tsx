@@ -1,4 +1,5 @@
 // app/leaderboard/page.tsx
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
@@ -31,6 +32,10 @@ type PageProps = {
     scope?: string;
   }>;
 };
+
+function getUserPicksHref(username: string) {
+  return `/users/${encodeURIComponent(username)}/picks`;
+}
 
 export default async function LeaderboardPage({ searchParams }: PageProps) {
   const session = await auth();
@@ -357,11 +362,14 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
                 </td>
 
                 <td className="px-6 py-5">
-                  <div className="flex items-center gap-4">
+                  <Link
+                    href={getUserPicksHref(row.username)}
+                    className="group flex w-fit items-center gap-4 rounded-2xl transition hover:opacity-80"
+                  >
                     <Avatar imageUrl={row.imageUrl} name={row.name} />
 
                     <div>
-                      <div className="text-lg font-black text-neutral-800">
+                      <div className="text-lg font-black text-neutral-800 transition group-hover:text-[#2b7fff]">
                         {row.name}
                       </div>
 
@@ -369,7 +377,7 @@ function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
                         @{row.username}
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 </td>
 
                 <td className="px-6 py-5 text-center">
@@ -409,13 +417,16 @@ function LeaderboardMobileCards({ rows }: { rows: LeaderboardRow[] }) {
       {rows.map((row) => (
         <div key={row.userId} className="rounded-3xl bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
+            <Link
+              href={getUserPicksHref(row.username)}
+              className="group flex min-w-0 items-center gap-3 transition hover:opacity-80"
+            >
               <PositionBadge position={row.position} />
 
               <Avatar imageUrl={row.imageUrl} name={row.name} />
 
               <div className="min-w-0">
-                <div className="truncate text-lg font-black text-neutral-800">
+                <div className="truncate text-lg font-black text-neutral-800 transition group-hover:text-[#2b7fff]">
                   {row.name}
                 </div>
 
@@ -423,7 +434,7 @@ function LeaderboardMobileCards({ rows }: { rows: LeaderboardRow[] }) {
                   @{row.username}
                 </div>
               </div>
-            </div>
+            </Link>
 
             <div className="shrink-0 text-right">
               <div className="text-2xl font-black text-blue-600">
