@@ -4,11 +4,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
-import {
-  calculatePickPoints,
-  getRarityMultiplier,
-  isCorrectWinnerPick,
-} from "../lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -93,8 +88,6 @@ export default async function EventsPage() {
             select: {
               status: true,
               winnerFighterId: true,
-              method: true,
-              round: true,
             },
           },
         },
@@ -102,6 +95,7 @@ export default async function EventsPage() {
           order: "asc",
         },
       },
+
       submissions: {
         include: {
           user: {
@@ -112,23 +106,32 @@ export default async function EventsPage() {
               imageUrl: true,
             },
           },
-          choices: {
-            include: {
-              fight: {
-                include: {
-                  result: {
-                    select: {
-                      status: true,
-                      winnerFighterId: true,
-                      method: true,
-                      round: true,
-                    },
-                  },
-                },
-              },
+          choices: true,
+        },
+      },
+
+      userScores: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              imageUrl: true,
             },
           },
         },
+        orderBy: [
+          {
+            points: "desc",
+          },
+          {
+            correct: "desc",
+          },
+          {
+            correctPercentage: "desc",
+          },
+        ],
       },
     },
   });
@@ -177,7 +180,19 @@ export default async function EventsPage() {
       }
     }
 
-    const leaderboardRows = getEventLeaderboardRows(event.submissions);
+    const leaderboardRows: LeaderboardRow[] = event.userScores.map(
+      (score, index) => ({
+        userId: score.user.id,
+        position: index + 1,
+        name: score.user.displayName || score.user.username,
+        username: score.user.username,
+        imageUrl: score.user.imageUrl,
+        correct: score.correct,
+        totalPicked: score.totalPicked,
+        correctPercentage: score.correctPercentage,
+        points: score.points,
+      }),
+    );
 
     return {
       id: event.id,
@@ -207,15 +222,15 @@ export default async function EventsPage() {
 
           {eventCards.length === 0 ? (
             <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
-              <h2 className="text-2xl font-black">No events yet.</h2>
+              <h2 className="text-2xl font-black">No completed events yet.</h2>
 
               <p className="mt-2 text-sm font-semibold text-neutral-500">
-                Events with submitted picks will show up here.
+                Completed events with submitted picks will show up here.
               </p>
             </div>
           ) : (
             <div className="space-y-5">
-              {eventCards.map((event, index) => {
+              {eventCards.map((event) => {
                 const winner = event.leaderboardRows[0];
 
                 return (
@@ -280,7 +295,7 @@ export default async function EventsPage() {
                               </h3>
 
                               <p className="mt-1 text-xs font-semibold text-neutral-500">
-                                Points for this event only.
+                                Cached points for this event only.
                               </p>
                             </div>
 
@@ -293,7 +308,11 @@ export default async function EventsPage() {
                         <div className="border-t border-neutral-100 bg-white">
                           {event.leaderboardRows.length === 0 ? (
                             <div className="p-5 text-sm font-semibold text-neutral-500">
-                              No leaderboard data for this event.
+                              No cached leaderboard data for this event. Run{" "}
+                              <span className="font-black">
+                                recalculateEventScores
+                              </span>
+                              .
                             </div>
                           ) : (
                             <EventLeaderboard rows={event.leaderboardRows} />
@@ -320,134 +339,6 @@ export default async function EventsPage() {
       </main>
     </>
   );
-}
-
-function getEventLeaderboardRows(
-  submissions: Array<{
-    user: {
-      id: string;
-      username: string;
-      displayName: string | null;
-      imageUrl: string | null;
-    };
-    choices: Array<{
-      fightId: string;
-      pickedFighterId: string;
-      pickedMethod: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
-      pickedRound: number | null;
-      fight: {
-        result: {
-          status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
-          winnerFighterId: string | null;
-          method?: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
-          round?: number | null;
-        } | null;
-      };
-    }>;
-  }>,
-): LeaderboardRow[] {
-  const fightStats = new Map<
-    string,
-    {
-      totalPickCount: number;
-      winnerPickCount: number;
-    }
-  >();
-
-  for (const submission of submissions) {
-    for (const choice of submission.choices) {
-      const result = choice.fight.result;
-
-      if (result?.status !== "WINNER" || !result.winnerFighterId) {
-        continue;
-      }
-
-      const current = fightStats.get(choice.fightId) || {
-        totalPickCount: 0,
-        winnerPickCount: 0,
-      };
-
-      current.totalPickCount += 1;
-
-      if (choice.pickedFighterId === result.winnerFighterId) {
-        current.winnerPickCount += 1;
-      }
-
-      fightStats.set(choice.fightId, current);
-    }
-  }
-
-  const rows = submissions.map((submission) => {
-    let correct = 0;
-    let totalPicked = 0;
-    let points = 0;
-
-    for (const choice of submission.choices) {
-      totalPicked += 1;
-
-      const result = choice.fight.result;
-
-      const isCorrect = isCorrectWinnerPick({
-        pickedFighterId: choice.pickedFighterId,
-        result,
-      });
-
-      if (isCorrect) {
-        correct += 1;
-      }
-
-      const stats = fightStats.get(choice.fightId) || {
-        totalPickCount: 0,
-        winnerPickCount: 0,
-      };
-
-      const rarityMultiplier = getRarityMultiplier(stats);
-
-      points += calculatePickPoints({
-        pickedFighterId: choice.pickedFighterId,
-        pickedMethod: choice.pickedMethod,
-        pickedRound: choice.pickedRound,
-        result: result
-          ? {
-              status: result.status,
-              winnerFighterId: result.winnerFighterId,
-              method: result.method ?? null,
-              round: result.round ?? null,
-            }
-          : null,
-        rarityMultiplier,
-      });
-    }
-
-    const correctPercentage =
-      totalPicked === 0 ? 0 : Math.round((correct / totalPicked) * 1000) / 10;
-
-    return {
-      userId: submission.user.id,
-      position: 0,
-      name: submission.user.displayName || submission.user.username,
-      username: submission.user.username,
-      imageUrl: submission.user.imageUrl,
-      correct,
-      totalPicked,
-      correctPercentage,
-      points,
-    };
-  });
-
-  return rows
-    .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.correct !== a.correct) return b.correct - a.correct;
-      if (b.correctPercentage !== a.correctPercentage) {
-        return b.correctPercentage - a.correctPercentage;
-      }
-
-      return a.name.localeCompare(b.name);
-    })
-    .map((row) => ({
-      ...row,
-    }));
 }
 
 function EventLeaderboard({ rows }: { rows: LeaderboardRow[] }) {
@@ -805,8 +696,8 @@ function PickGroup({
 
 function StatBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-neutral-50 px-4 py-3 text-center">
-      <div className="text-xs font-black uppercase tracking-wider text-neutral-400">
+    <div className="min-w-0 rounded-2xl bg-neutral-50 px-4 py-3 text-center">
+      <div className="truncate text-xs font-black uppercase tracking-wider text-neutral-400">
         {label}
       </div>
 

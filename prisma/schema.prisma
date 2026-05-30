@@ -55,6 +55,7 @@ model User {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @default(now()) @updatedAt
   submissions  PickSubmission[]
+  eventScores  UserEventScore[]
 }
 
 model Event {
@@ -69,6 +70,7 @@ model Event {
   updatedAt   DateTime         @default(now()) @updatedAt
   fights      Fight[]
   submissions PickSubmission[]
+  userScores   UserEventScore[]
 
   @@index([isActive, status])
 }
@@ -168,4 +170,25 @@ model FightResult {
   winnerFighter Fighter? @relation(fields: [winnerFighterId], references: [id], onDelete: Restrict)
 
   @@index([winnerFighterId])
+}
+
+model UserEventScore {
+  id                String   @id @default(cuid())
+  userId            String
+  eventId           String
+  points            Int      @default(0)
+  correct           Int      @default(0)
+  totalPicked       Int      @default(0)
+  correctPercentage Float    @default(0)
+  computedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+  @@index([userId])
+  @@index([eventId, points])
 }

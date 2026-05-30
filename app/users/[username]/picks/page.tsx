@@ -1,3 +1,4 @@
+// app/users/[username]/picks/page.tsx
 import { notFound, redirect } from "next/navigation";
 
 import { auth } from "@/auth";
@@ -111,6 +112,22 @@ export default async function UserPicksPage({ params }: PageProps) {
 
   const eventIds = submissions.map((submission) => submission.event.id);
 
+  const cachedScores =
+    eventIds.length === 0
+      ? []
+      : await prisma.userEventScore.findMany({
+          where: {
+            userId: viewedUser.id,
+            eventId: {
+              in: eventIds,
+            },
+          },
+        });
+
+  const scoreByEventId = new Map(
+    cachedScores.map((score) => [score.eventId, score]),
+  );
+
   const allSubmissionsForStats =
     eventIds.length === 0
       ? []
@@ -170,8 +187,8 @@ export default async function UserPicksPage({ params }: PageProps) {
   }
 
   const cards = submissions.map((submission) => {
-    let correct = 0;
-    let points = 0;
+    let liveCorrect = 0;
+    let livePoints = 0;
 
     const picks = submission.choices.map((choice) => {
       const fight = choice.fight;
@@ -192,7 +209,7 @@ export default async function UserPicksPage({ params }: PageProps) {
       });
 
       if (isCorrect) {
-        correct += 1;
+        liveCorrect += 1;
       }
 
       const stats = fightStats.get(choice.fightId) || {
@@ -226,7 +243,7 @@ export default async function UserPicksPage({ params }: PageProps) {
         resultStatus: fight.result?.status ?? null,
       });
 
-      points += pickPoints;
+      livePoints += pickPoints;
 
       return {
         id: choice.id,
@@ -244,13 +261,23 @@ export default async function UserPicksPage({ params }: PageProps) {
       };
     });
 
+    const cachedScore = scoreByEventId.get(submission.event.id);
+
+    const total = cachedScore?.totalPicked ?? submission.choices.length;
+    const correct = cachedScore?.correct ?? liveCorrect;
+    const points = cachedScore?.points ?? livePoints;
+    const correctPercentage =
+      cachedScore?.correctPercentage ??
+      (total === 0 ? 0 : Math.round((correct / total) * 1000) / 10);
+
     return {
       submissionId: submission.id,
       event: submission.event,
       submittedAt: submission.submittedAt,
       correct,
       points,
-      total: submission.choices.length,
+      total,
+      correctPercentage,
       picks,
     };
   });
@@ -287,10 +314,9 @@ export default async function UserPicksPage({ params }: PageProps) {
             </div>
           ) : (
             <div className="space-y-5">
-              {cards.map((card, index) => (
+              {cards.map((card) => (
                 <details
                   key={card.submissionId}
-                  open={index === 0}
                   className="group overflow-hidden rounded-3xl bg-white shadow-sm"
                 >
                   <summary className="cursor-pointer list-none p-6">
@@ -320,16 +346,12 @@ export default async function UserPicksPage({ params }: PageProps) {
                           label="Correct"
                           value={`${card.correct}/${card.total}`}
                         />
+
                         <StatBox label="Points" value={String(card.points)} />
+
                         <StatBox
                           label="Accuracy"
-                          value={
-                            card.total === 0
-                              ? "0%"
-                              : `${Math.round(
-                                  (card.correct / card.total) * 100,
-                                )}%`
-                          }
+                          value={`${formatPercentage(card.correctPercentage)}%`}
                         />
                       </div>
                     </div>
@@ -444,12 +466,14 @@ function getPickResultState({
 
 function StatBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-neutral-50 px-4 py-3 text-center">
-      <div className="text-xs font-black uppercase tracking-wider text-neutral-400">
+    <div className="min-w-0 rounded-2xl bg-neutral-50 px-4 py-3 text-center">
+      <div className="truncate text-xs font-black uppercase tracking-wider text-neutral-400">
         {label}
       </div>
 
-      <div className="mt-1 text-lg font-black text-neutral-800">{value}</div>
+      <div className="mt-1 truncate text-lg font-black text-neutral-800">
+        {value}
+      </div>
     </div>
   );
 }
@@ -709,4 +733,8 @@ function formatMultiplier(multiplier: number) {
   return Number.isInteger(multiplier)
     ? multiplier.toFixed(0)
     : multiplier.toFixed(2).replace(/0$/, "");
+}
+
+function formatPercentage(value: number) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 }

@@ -5,11 +5,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
-import {
-  calculatePickPoints,
-  getRarityMultiplier,
-  isCorrectWinnerPick,
-} from "../lib/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -102,14 +97,9 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const rows =
     scope === "event"
       ? leaderboardEvent
-        ? await getLeaderboardRows({
-            scope,
-            eventId: leaderboardEvent.id,
-          })
+        ? await getEventLeaderboardRows(leaderboardEvent.id)
         : []
-      : await getLeaderboardRows({
-          scope,
-        });
+      : await getAllTimeLeaderboardRows();
 
   return (
     <>
@@ -179,7 +169,8 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
             <div className="rounded-3xl bg-white p-8 text-center shadow-sm">
               <h2 className="text-2xl font-black">No leaderboard yet.</h2>
               <p className="mt-2 text-sm font-semibold text-neutral-500">
-                Once people submit picks, they will show up here.
+                Cached scores will show up here after you recalculate event
+                scores.
               </p>
             </div>
           )}
@@ -189,27 +180,13 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   );
 }
 
-async function getLeaderboardRows({
-  scope,
-  eventId,
-}: {
-  scope: Scope;
-  eventId?: string;
-}): Promise<LeaderboardRow[]> {
-  const submissions = await prisma.pickSubmission.findMany({
-    where:
-      scope === "event" && eventId
-        ? {
-            eventId,
-          }
-        : {
-            event: {
-              status: "COMPLETED",
-              slug: {
-                not: "ufc-test",
-              },
-            },
-          },
+async function getEventLeaderboardRows(
+  eventId: string,
+): Promise<LeaderboardRow[]> {
+  const scores = await prisma.userEventScore.findMany({
+    where: {
+      eventId,
+    },
     include: {
       user: {
         select: {
@@ -219,117 +196,102 @@ async function getLeaderboardRows({
           imageUrl: true,
         },
       },
-      choices: {
-        include: {
-          fight: {
-            include: {
-              result: true,
-            },
-          },
-        },
+    },
+    orderBy: [
+      {
+        points: "desc",
       },
+      {
+        correct: "desc",
+      },
+      {
+        correctPercentage: "desc",
+      },
+    ],
+  });
+
+  return scores.map((score, index) => ({
+    userId: score.user.id,
+    position: index + 1,
+    name: score.user.displayName || score.user.username,
+    username: score.user.username,
+    imageUrl: score.user.imageUrl,
+    correct: score.correct,
+    totalPicked: score.totalPicked,
+    correctPercentage: score.correctPercentage,
+    points: score.points,
+  }));
+}
+
+async function getAllTimeLeaderboardRows(): Promise<LeaderboardRow[]> {
+  const totals = await prisma.userEventScore.groupBy({
+    by: ["userId"],
+    where: {
+      event: {
+        slug: {
+          not: "ufc-test",
+        },
+        status: "COMPLETED",
+      },
+    },
+    _sum: {
+      points: true,
+      correct: true,
+      totalPicked: true,
     },
   });
 
-  const fightStats = new Map<
-    string,
-    {
-      totalPickCount: number;
-      winnerPickCount: number;
-    }
-  >();
-
-  for (const submission of submissions) {
-    for (const choice of submission.choices) {
-      const result = choice.fight.result;
-
-      if (result?.status !== "WINNER" || !result.winnerFighterId) {
-        continue;
-      }
-
-      const current = fightStats.get(choice.fightId) || {
-        totalPickCount: 0,
-        winnerPickCount: 0,
-      };
-
-      current.totalPickCount += 1;
-
-      if (choice.pickedFighterId === result.winnerFighterId) {
-        current.winnerPickCount += 1;
-      }
-
-      fightStats.set(choice.fightId, current);
-    }
-  }
-
-  const rowsByUser = new Map<string, Omit<LeaderboardRow, "position">>();
-
-  for (const submission of submissions) {
-    const user = submission.user;
-
-    const existing = rowsByUser.get(user.id) || {
-      userId: user.id,
-      name: user.displayName || user.username,
-      username: user.username,
-      imageUrl: user.imageUrl,
-      correct: 0,
-      totalPicked: 0,
-      correctPercentage: 0,
-      points: 0,
-    };
-
-    for (const choice of submission.choices) {
-      existing.totalPicked += 1;
-
-      const result = choice.fight.result;
-
-      const isCorrect = isCorrectWinnerPick({
-        pickedFighterId: choice.pickedFighterId,
-        result,
-      });
-
-      if (isCorrect) {
-        existing.correct += 1;
-      }
-
-      const stats = fightStats.get(choice.fightId) || {
-        totalPickCount: 0,
-        winnerPickCount: 0,
-      };
-
-      const rarityMultiplier = getRarityMultiplier(stats);
-
-      existing.points += calculatePickPoints({
-        pickedFighterId: choice.pickedFighterId,
-        pickedMethod: choice.pickedMethod,
-        pickedRound: choice.pickedRound,
-        result,
-        rarityMultiplier,
-      });
-    }
-
-    existing.correctPercentage =
-      existing.totalPicked === 0
-        ? 0
-        : Math.round((existing.correct / existing.totalPicked) * 1000) / 10;
-
-    rowsByUser.set(user.id, existing);
-  }
-
-  const sortedRows = Array.from(rowsByUser.values()).sort((a, b) => {
-    if (b.points !== a.points) return b.points - a.points;
-    if (b.correct !== a.correct) return b.correct - a.correct;
-    if (b.correctPercentage !== a.correctPercentage) {
-      return b.correctPercentage - a.correctPercentage;
-    }
-
-    return a.name.localeCompare(b.name);
+  const users = await prisma.user.findMany({
+    where: {
+      id: {
+        in: totals.map((row) => row.userId),
+      },
+    },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      imageUrl: true,
+    },
   });
 
-  return sortedRows.map((row, index) => ({
-    ...row,
-    position: index + 1,
-  }));
+  const userById = new Map(users.map((user) => [user.id, user]));
+
+  const rows = totals.map((row) => {
+    const user = userById.get(row.userId);
+
+    const points = row._sum.points || 0;
+    const correct = row._sum.correct || 0;
+    const totalPicked = row._sum.totalPicked || 0;
+
+    return {
+      userId: row.userId,
+      position: 0,
+      name: user?.displayName || user?.username || "Unknown",
+      username: user?.username || "unknown",
+      imageUrl: user?.imageUrl || null,
+      points,
+      correct,
+      totalPicked,
+      correctPercentage:
+        totalPicked === 0 ? 0 : Math.round((correct / totalPicked) * 1000) / 10,
+    };
+  });
+
+  return rows
+    .sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.correct !== a.correct) return b.correct - a.correct;
+      if (b.correctPercentage !== a.correctPercentage) {
+        return b.correctPercentage - a.correctPercentage;
+      }
+
+      return a.name.localeCompare(b.name);
+    })
+    .map((row, index) => ({
+      ...row,
+      position: index + 1,
+    }));
 }
 
 function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {
