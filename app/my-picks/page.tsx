@@ -21,6 +21,8 @@ export default async function MyPicksPage() {
     redirect("/login");
   }
 
+  console.time("my-picks: submissions query");
+
   const submissions = await prisma.pickSubmission.findMany({
     where: {
       userId: session.user.id,
@@ -79,6 +81,8 @@ export default async function MyPicksPage() {
       },
     },
   });
+
+  console.timeEnd("my-picks: submissions query");
 
   const eventIds = submissions.map((submission) => submission.event.id);
 

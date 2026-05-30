@@ -42,6 +42,8 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const scope: Scope = params?.scope === "alltime" ? "alltime" : "event";
 
+  console.time("leaderboard: active event query");
+
   const activeEvent = await prisma.event.findFirst({
     where: {
       isActive: true,
@@ -68,10 +70,14 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
     },
   });
 
+  console.timeEnd("leaderboard: active event query");
+
   const activeEventHasResult =
     activeEvent?.fights.some((fight) => {
       return fight.result && fight.result.status !== "PENDING";
     }) ?? false;
+
+  console.time("leaderboard: last completed event query");
 
   const lastCompletedEvent = await prisma.event.findFirst({
     where: {
@@ -89,6 +95,8 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
       status: true,
     },
   });
+
+  console.timeEnd("leaderboard: last completed event query");
 
   const leaderboardEvent = activeEventHasResult
     ? activeEvent

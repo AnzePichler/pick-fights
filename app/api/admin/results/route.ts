@@ -4,6 +4,11 @@ import { z } from "zod";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  calculatePickPoints,
+  getRarityMultiplier,
+  isCorrectWinnerPick,
+} from "../../../lib/scoring";
 
 const fightResultStatusSchema = z.enum([
   "PENDING",
@@ -145,6 +150,17 @@ export async function PATCH(request: Request) {
           },
         );
       }
+
+      if (result.status !== "WINNER" && (result.method || result.round)) {
+        return NextResponse.json(
+          {
+            error: "Only winner results can have method or round.",
+          },
+          {
+            status: 400,
+          },
+        );
+      }
     }
 
     await prisma.$transaction([
@@ -185,6 +201,8 @@ export async function PATCH(request: Request) {
         : []),
     ]);
 
+    await recalculateEventScores(eventId);
+
     return NextResponse.json({
       ok: true,
     });
@@ -200,4 +218,136 @@ export async function PATCH(request: Request) {
       },
     );
   }
+}
+
+async function recalculateEventScores(eventId: string) {
+  const event = await prisma.event.findUnique({
+    where: {
+      id: eventId,
+    },
+    select: {
+      id: true,
+      submissions: {
+        select: {
+          userId: true,
+          choices: {
+            select: {
+              fightId: true,
+              pickedFighterId: true,
+              pickedMethod: true,
+              pickedRound: true,
+              fight: {
+                select: {
+                  result: {
+                    select: {
+                      status: true,
+                      winnerFighterId: true,
+                      method: true,
+                      round: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!event) {
+    throw new Error(`Event not found: ${eventId}`);
+  }
+
+  const fightStats = new Map<
+    string,
+    {
+      totalPickCount: number;
+      winnerPickCount: number;
+    }
+  >();
+
+  for (const submission of event.submissions) {
+    for (const choice of submission.choices) {
+      const result = choice.fight.result;
+
+      if (result?.status !== "WINNER" || !result.winnerFighterId) {
+        continue;
+      }
+
+      const current = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      current.totalPickCount += 1;
+
+      if (choice.pickedFighterId === result.winnerFighterId) {
+        current.winnerPickCount += 1;
+      }
+
+      fightStats.set(choice.fightId, current);
+    }
+  }
+
+  const scoreRows = event.submissions.map((submission) => {
+    let correct = 0;
+    let points = 0;
+    const totalPicked = submission.choices.length;
+
+    for (const choice of submission.choices) {
+      const result = choice.fight.result;
+
+      const isCorrect = isCorrectWinnerPick({
+        pickedFighterId: choice.pickedFighterId,
+        result,
+      });
+
+      if (isCorrect) {
+        correct += 1;
+      }
+
+      const stats = fightStats.get(choice.fightId) || {
+        totalPickCount: 0,
+        winnerPickCount: 0,
+      };
+
+      const rarityMultiplier = getRarityMultiplier(stats);
+
+      points += calculatePickPoints({
+        pickedFighterId: choice.pickedFighterId,
+        pickedMethod: choice.pickedMethod,
+        pickedRound: choice.pickedRound,
+        result,
+        rarityMultiplier,
+      });
+    }
+
+    const correctPercentage =
+      totalPicked === 0 ? 0 : Math.round((correct / totalPicked) * 1000) / 10;
+
+    return {
+      userId: submission.userId,
+      eventId: event.id,
+      points,
+      correct,
+      totalPicked,
+      correctPercentage,
+      computedAt: new Date(),
+    };
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.userEventScore.deleteMany({
+      where: {
+        eventId: event.id,
+      },
+    });
+
+    if (scoreRows.length > 0) {
+      await tx.userEventScore.createMany({
+        data: scoreRows,
+      });
+    }
+  });
 }
