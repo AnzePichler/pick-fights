@@ -40,28 +40,28 @@ export default async function Navbar() {
             href="/picks"
             className="text-md font-[1000] text-neutral-700 transition hover:text-neutral-800"
           >
-            Make picks
+            Submit picks
+          </a>
+
+          <a
+            href="/events"
+            className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
+          >
+            Events
           </a>
 
           <a
             href="/my-picks"
             className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
-            My picks
+            Pick history
           </a>
 
           <a
             href="/leaderboard"
             className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
-            Leaderboard
-          </a>
-
-          <a
-            href="/account"
-            className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
-          >
-            Account
+            Gig leaderboard
           </a>
 
           {session?.user?.role === "ADMIN" && (
@@ -127,12 +127,19 @@ export default async function Navbar() {
 
       {session?.user && (
         <div className="border-t border-gray-100 bg-white px-4 py-2 md:hidden">
-          <div className="mx-auto grid max-w-md grid-cols-4 gap-2">
+          <div className="mx-auto grid max-w-md grid-cols-5 gap-2">
             <a
               href="/picks"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Picks
+            </a>
+
+            <a
+              href="/events"
+              className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
+            >
+              Events
             </a>
 
             <a
@@ -147,13 +154,6 @@ export default async function Navbar() {
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Leaderboard
-            </a>
-
-            <a
-              href="/account"
-              className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
-            >
-              Account
             </a>
           </div>
         </div>
