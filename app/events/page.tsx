@@ -45,6 +45,8 @@ export default async function EventsPage() {
     redirect("/login");
   }
 
+  console.time("events-page: events query");
+
   const events = await prisma.event.findMany({
     where: {
       status: "COMPLETED",
@@ -135,6 +137,8 @@ export default async function EventsPage() {
       },
     },
   });
+
+  console.timeEnd("events-page: events query");
 
   const eventCards = events.map((event) => {
     const fightMap = new Map(
