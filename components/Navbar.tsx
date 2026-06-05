@@ -2,6 +2,7 @@
 import { signOut } from "@/auth";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 export default async function Navbar() {
   const session = await auth();
@@ -28,56 +29,56 @@ export default async function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <a
+        <Link
           href="/picks"
           className="text-2xl font-black italic tracking-tight text-neutral-800"
         >
           Pick Fights
-        </a>
+        </Link>
 
         <div className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 md:flex">
-          <a
+          <Link
             href="/picks"
             className="text-md font-[1000] text-neutral-700 transition hover:text-neutral-800"
           >
             Submit picks
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/events"
             className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             Events
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/my-picks"
             className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             Pick history
-          </a>
+          </Link>
 
-          <a
+          <Link
             href="/leaderboard"
             className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
           >
             Gig leaderboard
-          </a>
+          </Link>
 
           {session?.user?.role === "ADMIN" && (
-            <a
+            <Link
               href="/admin"
               className="text-md font-semibold text-gray-700 transition hover:text-neutral-800"
             >
               Admin
-            </a>
+            </Link>
           )}
         </div>
 
         <div className="flex items-center gap-4">
           {session?.user ? (
             <>
-              <a
+              <Link
                 href="/account"
                 className="flex items-center gap-2 rounded-xl bg-neutral-100 px-3 py-1.5 transition hover:bg-neutral-200"
               >
@@ -86,7 +87,7 @@ export default async function Navbar() {
                 <span className="hidden text-sm font-bold text-neutral-700 sm:inline">
                   {shownName}
                 </span>
-              </a>
+              </Link>
 
               <form
                 action={async () => {
@@ -107,19 +108,19 @@ export default async function Navbar() {
             </>
           ) : (
             <>
-              <a
+              <Link
                 href="/login"
                 className="text-sm font-bold text-neutral-700 transition hover:text-neutral-900"
               >
                 Log in
-              </a>
+              </Link>
 
-              <a
+              <Link
                 href="/signup"
                 className="rounded-xl bg-[#2b7fff] px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-700"
               >
                 Sign up
-              </a>
+              </Link>
             </>
           )}
         </div>
@@ -128,33 +129,33 @@ export default async function Navbar() {
       {session?.user && (
         <div className="border-t border-gray-100 bg-white px-4 py-2 md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-5 gap-2">
-            <a
+            <Link
               href="/picks"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Picks
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/events"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Events
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/my-picks"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Mine
-            </a>
+            </Link>
 
-            <a
+            <Link
               href="/leaderboard"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
             >
               Leaderboard
-            </a>
+            </Link>
           </div>
         </div>
       )}
