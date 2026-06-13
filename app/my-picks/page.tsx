@@ -35,7 +35,9 @@ export default async function MyPicksPage() {
     orderBy: {
       submittedAt: "desc",
     },
-    include: {
+    select: {
+      id: true,
+      submittedAt: true,
       event: {
         select: {
           id: true,
@@ -45,9 +47,15 @@ export default async function MyPicksPage() {
         },
       },
       choices: {
-        include: {
+        select: {
+          id: true,
+          fightId: true,
+          pickedFighterId: true,
+          pickedMethod: true,
+          pickedRound: true,
           fight: {
-            include: {
+            select: {
+              id: true,
               fighterA: {
                 select: {
                   id: true,
@@ -86,6 +94,8 @@ export default async function MyPicksPage() {
 
   const eventIds = submissions.map((submission) => submission.event.id);
 
+  console.time("my-picks: cached scores query");
+
   const cachedScores =
     eventIds.length === 0
       ? []
@@ -96,32 +106,43 @@ export default async function MyPicksPage() {
               in: eventIds,
             },
           },
+          select: {
+            eventId: true,
+            totalPicked: true,
+            correct: true,
+            points: true,
+            correctPercentage: true,
+          },
         });
+
+  console.timeEnd("my-picks: cached scores query");
 
   const scoreByEventId = new Map(
     cachedScores.map((score) => [score.eventId, score]),
   );
 
-  const allSubmissionsForStats =
+  console.time("my-picks: all submissions stats query");
+
+  const statChoices =
     eventIds.length === 0
       ? []
-      : await prisma.pickSubmission.findMany({
+      : await prisma.pickChoice.findMany({
           where: {
-            eventId: {
-              in: eventIds,
+            submission: {
+              eventId: {
+                in: eventIds,
+              },
             },
           },
-          include: {
-            choices: {
-              include: {
-                fight: {
-                  include: {
-                    result: {
-                      select: {
-                        status: true,
-                        winnerFighterId: true,
-                      },
-                    },
+          select: {
+            fightId: true,
+            pickedFighterId: true,
+            fight: {
+              select: {
+                result: {
+                  select: {
+                    status: true,
+                    winnerFighterId: true,
                   },
                 },
               },
@@ -129,6 +150,7 @@ export default async function MyPicksPage() {
           },
         });
 
+  console.timeEnd("my-picks: all submissions stats query");
   const fightStats = new Map<
     string,
     {
@@ -137,28 +159,28 @@ export default async function MyPicksPage() {
     }
   >();
 
-  for (const submission of allSubmissionsForStats) {
-    for (const choice of submission.choices) {
-      const result = choice.fight.result;
+  for (const choice of statChoices) {
+    const result = choice.fight.result;
 
-      if (result?.status !== "WINNER" || !result.winnerFighterId) {
-        continue;
-      }
-
-      const current = fightStats.get(choice.fightId) || {
-        totalPickCount: 0,
-        winnerPickCount: 0,
-      };
-
-      current.totalPickCount += 1;
-
-      if (choice.pickedFighterId === result.winnerFighterId) {
-        current.winnerPickCount += 1;
-      }
-
-      fightStats.set(choice.fightId, current);
+    if (result?.status !== "WINNER" || !result.winnerFighterId) {
+      continue;
     }
+
+    const current = fightStats.get(choice.fightId) || {
+      totalPickCount: 0,
+      winnerPickCount: 0,
+    };
+
+    current.totalPickCount += 1;
+
+    if (choice.pickedFighterId === result.winnerFighterId) {
+      current.winnerPickCount += 1;
+    }
+
+    fightStats.set(choice.fightId, current);
   }
+
+  console.time("my-picks: build cards");
 
   const cards = submissions.map((submission) => {
     let liveCorrect = 0;
@@ -259,6 +281,8 @@ export default async function MyPicksPage() {
       picks,
     };
   });
+
+  console.timeEnd("my-picks: build cards");
 
   return (
     <>

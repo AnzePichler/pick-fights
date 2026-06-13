@@ -13,14 +13,14 @@ const profileSchema = z.object({
     .max(30, "Display name must be 30 characters or fewer."),
   imageUrl: z
     .string()
-    .max(750_000, "Image is too large.")
+    .trim()
+    .max(500, "Image URL is too long.")
     .refine(
       (value) =>
         value === "" ||
-        value.startsWith("data:image/") ||
         value.startsWith("https://") ||
         value.startsWith("http://"),
-      "Invalid image.",
+      "Please use a valid image URL.",
     ),
 });
 

@@ -7,24 +7,7 @@ import Link from "next/link";
 export default async function Navbar() {
   const session = await auth();
 
-  const currentUser = session?.user?.id
-    ? await prisma.user.findUnique({
-        where: {
-          id: session.user.id,
-        },
-        select: {
-          username: true,
-          displayName: true,
-          imageUrl: true,
-        },
-      })
-    : null;
-
-  const shownName =
-    currentUser?.displayName ||
-    currentUser?.username ||
-    session?.user?.name ||
-    "Account";
+  const shownName = session?.user?.name || session?.user?.username || "Account";
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white backdrop-blur">
@@ -82,7 +65,7 @@ export default async function Navbar() {
                 href="/account"
                 className="flex items-center gap-2 rounded-xl bg-neutral-100 px-3 py-1.5 transition hover:bg-neutral-200"
               >
-                <Avatar imageUrl={currentUser?.imageUrl} name={shownName} />
+                <Avatar imageUrl={null} name={shownName} />
 
                 <span className="hidden text-sm font-bold text-neutral-700 sm:inline">
                   {shownName}
