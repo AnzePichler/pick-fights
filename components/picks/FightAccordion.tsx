@@ -6,7 +6,8 @@ import { useState } from "react";
 
 import FightCard from "./FightCard";
 import SubmitPicksButton from "./SubmitPicksButton";
-import type { Fight, PickDraft } from "../../types/types";
+import type { PickDraft } from "../../types/types";
+import type { PicksFight } from "./types";
 
 type CommunityPickUser = {
   id: string;
@@ -22,7 +23,7 @@ type FightCommunityPicks = {
 
 type Props = {
   eventId: string;
-  fights: Fight[];
+  fights: PicksFight[];
   initialPicks?: Record<string, PickDraft>;
   editableFightIds?: string[];
   isLocked?: boolean;

@@ -1,7 +1,7 @@
-import type { Fighter } from "../../types/types";
+import type { PicksFighter } from "./types";
 
 type Props = {
-  fighter: Fighter;
+  fighter: PicksFighter;
   align: "left" | "right";
   onSelect: () => void;
   isLocked?: boolean;
@@ -95,7 +95,7 @@ export default function FighterSide({
   );
 }
 
-function FighterImage({ fighter }: { fighter: Fighter }) {
+function FighterImage({ fighter }: { fighter: PicksFighter }) {
   return (
     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl sm:h-24 sm:w-24 md:h-36 md:w-36">
       <img
@@ -107,7 +107,7 @@ function FighterImage({ fighter }: { fighter: Fighter }) {
   );
 }
 
-function CountryFlag({ fighter }: { fighter: Fighter }) {
+function CountryFlag({ fighter }: { fighter: PicksFighter }) {
   if (!fighter.countryFlagUrl) return null;
 
   return (
@@ -122,13 +122,13 @@ function CountryFlag({ fighter }: { fighter: Fighter }) {
   );
 }
 
-function getRankLabel(fighter: Fighter) {
+function getRankLabel(fighter: PicksFighter) {
   if (isChampion(fighter)) return "C";
   if (fighter.ranking != null) return `#${fighter.ranking}`;
   return null;
 }
 
-function isChampion(fighter: Fighter) {
+function isChampion(fighter: PicksFighter) {
   const imageUrl = (fighter.imageUrl || "").toUpperCase();
   return imageUrl.includes("BELT");
 }

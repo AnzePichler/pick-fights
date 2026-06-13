@@ -1,8 +1,8 @@
 import FighterSide from "./FighterSide";
-import type { Fight } from "../../types/types";
+import type { PicksFight } from "./types";
 
 type Props = {
-  fight: Fight;
+  fight: PicksFight;
   selectedFighterId: string | undefined;
   onSelectFighter: (fightId: string, fighterId: string) => void;
   isLocked?: boolean;

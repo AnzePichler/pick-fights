@@ -37,18 +37,49 @@ export default async function PicksPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const requestedView = params?.view === "others" ? "others" : "mine";
 
+  const fighterSelect = {
+    id: true,
+    name: true,
+    record: true,
+    imageUrl: true,
+    country: true,
+    countryFlagUrl: true,
+    ranking: true,
+    age: true,
+    height: true,
+    reach: true,
+    winsByKo: true,
+    winsBySub: true,
+    winsByDec: true,
+  } as const;
+
   const event = await prisma.event.findFirst({
     where: {
       isActive: true,
     },
-    include: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      lockAt: true,
+
       fights: {
         where: {
           status: "ACTIVE",
         },
-        include: {
-          fighterA: true,
-          fighterB: true,
+        select: {
+          id: true,
+          order: true,
+          weightClass: true,
+
+          fighterA: {
+            select: fighterSelect,
+          },
+
+          fighterB: {
+            select: fighterSelect,
+          },
+
           result: {
             select: {
               status: true,
