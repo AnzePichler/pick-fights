@@ -181,20 +181,27 @@ export default async function PicksPage({ searchParams }: PageProps) {
       };
     }
 
-    const allSubmissions = await prisma.pickSubmission.findMany({
+    const communityChoices = await prisma.pickChoice.findMany({
       where: {
-        eventId: event.id,
+        submission: {
+          eventId: event.id,
+        },
       },
-      include: {
-        user: {
+      select: {
+        fightId: true,
+        pickedFighterId: true,
+        submission: {
           select: {
-            id: true,
-            username: true,
-            displayName: true,
-            imageUrl: true,
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                imageUrl: true,
+              },
+            },
           },
         },
-        choices: true,
       },
     });
 
@@ -208,27 +215,28 @@ export default async function PicksPage({ searchParams }: PageProps) {
       ]),
     );
 
-    for (const submission of allSubmissions) {
+    for (const choice of communityChoices) {
+      const fight = fightMap.get(choice.fightId);
+      const bucket = communityPicks[choice.fightId];
+
+      if (!fight || !bucket) {
+        continue;
+      }
+
       const user = {
-        id: submission.user.id,
-        name: submission.user.displayName || submission.user.username,
-        imageUrl: submission.user.imageUrl,
-        isYou: submission.user.id === session.user.id,
+        id: choice.submission.user.id,
+        name:
+          choice.submission.user.displayName || choice.submission.user.username,
+        imageUrl: choice.submission.user.imageUrl,
+        isYou: choice.submission.user.id === session.user.id,
       };
 
-      for (const choice of submission.choices) {
-        const fight = fightMap.get(choice.fightId);
-        const bucket = communityPicks[choice.fightId];
+      if (choice.pickedFighterId === fight.fighterAId) {
+        bucket.fighterA.push(user);
+      }
 
-        if (!fight || !bucket) continue;
-
-        if (choice.pickedFighterId === fight.fighterAId) {
-          bucket.fighterA.push(user);
-        }
-
-        if (choice.pickedFighterId === fight.fighterBId) {
-          bucket.fighterB.push(user);
-        }
+      if (choice.pickedFighterId === fight.fighterBId) {
+        bucket.fighterB.push(user);
       }
     }
   }
