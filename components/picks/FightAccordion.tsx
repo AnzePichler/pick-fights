@@ -14,6 +14,8 @@ type CommunityPickUser = {
   name: string;
   imageUrl: string | null;
   isYou: boolean;
+  method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  round: number | null;
 };
 
 type FightCommunityPicks = {
@@ -378,7 +380,7 @@ function PickGroup({
             }`}
           >
             {shownUsers.map((user) => (
-              <Avatar key={user.id} user={user} />
+              <Avatar key={user.id} user={user} align={align} />
             ))}
 
             {extraCount > 0 && (
@@ -402,25 +404,65 @@ function PickGroup({
   );
 }
 
-function Avatar({ user }: { user: CommunityPickUser }) {
+function formatPrediction(user: CommunityPickUser) {
+  if (user.method === "DECISION") return "Decision";
+
+  if (user.method === "KO_TKO") {
+    return user.round ? `KO/TKO · Round ${user.round}` : "KO/TKO";
+  }
+
+  if (user.method === "SUBMISSION") {
+    return user.round ? `Submission · Round ${user.round}` : "Submission";
+  }
+
+  return "Winner only";
+}
+
+function Avatar({
+  user,
+  align,
+}: {
+  user: CommunityPickUser;
+  align: "left" | "right";
+}) {
+  const prediction = formatPrediction(user);
+  const displayName = user.isYou ? `${user.name} (You)` : user.name;
+
   return (
     <div
-      title={user.isYou ? `${user.name} (You)` : user.name}
-      className={`h-7 w-7 shrink-0 overflow-hidden rounded-full bg-neutral-200 md:h-9 md:w-9 ${
-        user.isYou ? "ring-2 ring-blue-500" : ""
-      }`}
+      tabIndex={0}
+      aria-label={`${displayName}: ${prediction}`}
+      className="group relative z-0 h-7 w-7 shrink-0 cursor-help rounded-full outline-none hover:z-50 focus-visible:z-50 focus-visible:ring-2 focus-visible:ring-blue-500 md:h-9 md:w-9"
     >
-      {user.imageUrl ? (
-        <img
-          src={user.imageUrl}
-          alt={user.name}
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-neutral-700 md:text-xs">
-          {getInitials(user.name)}
-        </div>
-      )}
+      <span
+        className={`block h-full w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700 ${
+          user.isYou ? "ring-2 ring-blue-500" : ""
+        }`}
+      >
+        {user.imageUrl ? (
+          <img
+            src={user.imageUrl}
+            alt={user.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-[10px] font-black text-neutral-700 dark:text-neutral-100 md:text-xs">
+            {getInitials(user.name)}
+          </span>
+        )}
+      </span>
+
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute bottom-full z-50 mb-2 min-w-40 max-w-56 rounded-xl bg-neutral-900 px-3 py-2 text-left text-white opacity-0 shadow-lg ring-1 ring-white/10 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 dark:bg-neutral-800 ${
+          align === "right" ? "right-0" : "left-0"
+        }`}
+      >
+        <span className="block truncate text-xs font-bold">{displayName}</span>
+        <span className="mt-1 block whitespace-nowrap text-xs font-semibold text-blue-300">
+          {prediction}
+        </span>
+      </span>
     </div>
   );
 }

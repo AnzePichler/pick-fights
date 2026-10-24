@@ -20,6 +20,8 @@ export type CommunityPickUser = {
   name: string;
   imageUrl: string | null;
   isYou: boolean;
+  method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  round: number | null;
 };
 
 export type FightCommunityPicks = {
@@ -62,7 +64,6 @@ export default async function PicksPage({ searchParams }: PageProps) {
       name: true,
       status: true,
       lockAt: true,
-
       fights: {
         where: {
           status: "ACTIVE",
@@ -71,15 +72,12 @@ export default async function PicksPage({ searchParams }: PageProps) {
           id: true,
           order: true,
           weightClass: true,
-
           fighterA: {
             select: fighterSelect,
           },
-
           fighterB: {
             select: fighterSelect,
           },
-
           result: {
             select: {
               status: true,
@@ -190,6 +188,8 @@ export default async function PicksPage({ searchParams }: PageProps) {
       select: {
         fightId: true,
         pickedFighterId: true,
+        pickedMethod: true,
+        pickedRound: true,
         submission: {
           select: {
             user: {
@@ -223,12 +223,14 @@ export default async function PicksPage({ searchParams }: PageProps) {
         continue;
       }
 
-      const user = {
+      const user: CommunityPickUser = {
         id: choice.submission.user.id,
         name:
           choice.submission.user.displayName || choice.submission.user.username,
         imageUrl: choice.submission.user.imageUrl,
         isYou: choice.submission.user.id === session.user.id,
+        method: choice.pickedMethod,
+        round: choice.pickedRound,
       };
 
       if (choice.pickedFighterId === fight.fighterAId) {
