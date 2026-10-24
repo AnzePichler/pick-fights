@@ -14,8 +14,8 @@ type CommunityPickUser = {
   name: string;
   imageUrl: string | null;
   isYou: boolean;
-  method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
-  round: number | null;
+  method?: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
+  round?: number | null;
 };
 
 type FightCommunityPicks = {
