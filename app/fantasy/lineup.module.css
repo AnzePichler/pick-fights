@@ -1,0 +1,28 @@
+.field { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 5 / 4; border: 1px solid #e5e7eb; border-radius: 24px; overflow: hidden; background: linear-gradient(120deg, #fff, #fafafa 65%); color: #262626; font-family: Arial, Helvetica, sans-serif; }
+.lines { position: absolute; inset: 0; width: 100%; height: 100%; fill: none; stroke: #d1d5db; stroke-width: 1.8; pointer-events: none; }
+.innerLine { opacity: 0.35; }
+.brand { font: italic 900 34px Arial, sans-serif; letter-spacing: -1px; fill: #d4d4d4; stroke: none; opacity: 0.65; }
+.fieldTop, .fieldBottom { position: absolute; left: 5%; right: 5%; display: flex; justify-content: space-between; gap: 8px; font-size: clamp(7px, 1.1cqw, 11px); font-weight: 700; color: #737373; pointer-events: none; }
+.fieldTop { top: 4%; }
+.fieldBottom { bottom: 3%; font-size: clamp(6px, 1cqw, 10px); }
+.slot { position: absolute; transform: translate(-50%, -50%); width: 25%; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.choose { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 12px; }
+.choose:disabled { cursor: default; }
+.choose:not(:disabled):hover .figure { transform: translateY(-3px); }
+.choose:focus-visible { outline: 2px solid #2b7fff; outline-offset: 5px; }
+.role { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 0.6cqw; font-size: clamp(9px, 1.4cqw, 13px); font-weight: 700; color: #525252; }
+.captain { display: inline-flex; justify-content: center; align-items: center; border-radius: 3px; background: #ba922d; color: #fff; width: 2.2cqw; height: 2.2cqw; min-width: 13px; min-height: 13px; font-size: clamp(8px, 1.1cqw, 11px); }
+.figure { position: relative; display: flex; justify-content: center; align-items: flex-start; height: 21cqw; width: 100%; overflow: hidden; transition: transform 150ms; color: #d4d4d4; }
+.figure > img { width: auto; max-width: 100%; height: 170%; object-fit: contain; object-position: center top; }
+.figure > svg { height: 115%; width: auto; max-width: 90%; }
+.empty { align-items: center; }
+.plus { display: flex; align-items: center; justify-content: center; width: 8cqw; height: 8cqw; min-width: 36px; min-height: 36px; border: 1px solid #e5e7eb; border-radius: 12px; background: white; color: #2b7fff; font-size: clamp(26px, 4cqw, 44px); font-weight: 300; }
+.namePlate { display: flex; flex-direction: column; width: 100%; overflow: hidden; border-radius: 10px; background: white; box-shadow: 0 1px 3px #00000008; }
+.name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1cqw 0.5cqw; font-size: clamp(10px, 1.7cqw, 17px); font-weight: 700; line-height: 1.15; }
+.detail { display: block; padding: 0.7cqw 0.4cqw; background: #f5f5f5; color: #737373; font-size: clamp(8px, 1.2cqw, 12px); line-height: 1.2; }
+.missed { background: #fef2f2; color: #b91c1c; }
+.scored { background: #f0fdf4; color: #15803d; }
+.remove { margin-top: 0.6cqw; padding: 3px 7px; font-size: clamp(9px, 1.1cqw, 11px); color: #737373; cursor: pointer; }
+.dialog { margin: auto; padding: 0; width: min(560px, calc(100% - 24px)); max-height: 88dvh; overflow-y: auto; background: white; color: #262626; border: 1px solid #e5e7eb; border-radius: 24px; box-shadow: 0 20px 80px #0003; }
+.dialog::backdrop { background: #17171780; backdrop-filter: blur(4px); }
+@media (prefers-reduced-motion: reduce) { .figure { transition: none; } }

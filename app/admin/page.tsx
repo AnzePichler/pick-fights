@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/Navbar";
 import AdminResultsForm from "./AdminResultsForm";
+import SyncSettings from "./SyncSettings";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ export default async function AdminPage() {
               winnerFighterId: true,
               method: true,
               round: true,
+              source: true,
             },
           },
         },
@@ -102,7 +104,15 @@ export default async function AdminPage() {
             </p>
           </div>
 
-          <AdminResultsForm event={adminEvent} />
+          {event.slug !== "ufc-test" && <SyncSettings event={{
+            id: event.id, startsAt: event.startsAt.toISOString(), providerEventId: event.providerEventId,
+            syncEnabled: event.syncEnabled, lastSyncAt: event.lastSyncAt?.toISOString() ?? null,
+            nextSyncAt: event.nextSyncAt?.toISOString() ?? null, lastSyncError: event.lastSyncError,
+            fights: event.fights.filter((fight) => fight.status === "ACTIVE").map((fight) => ({
+              id: fight.id, fighterA: fight.fighterA.name, fighterB: fight.fighterB.name, manual: fight.result?.source === "MANUAL",
+            })),
+          }} />}
+          <AdminResultsForm key={event.resultVersion} event={adminEvent} />
         </section>
       </main>
     </>

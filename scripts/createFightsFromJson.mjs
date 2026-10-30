@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { fightOddsData } from "../lib/fight-odds.mjs";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is missing from your .env file.");
@@ -123,6 +124,7 @@ async function main() {
     }
 
     pairs.push({
+      ...fightOddsData(fightersJson[index]?.odds, fightersJson[index + 1]?.odds),
       order: index / 2 + 1,
       fighterA,
       fighterB,
@@ -141,6 +143,24 @@ async function main() {
   }
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Event" WHERE "id" = ${event.id} FOR UPDATE`;
+    const currentEvent = await tx.event.findUniqueOrThrow({ where: { id: event.id } });
+    if (
+      !["DRAFT", "OPEN"].includes(currentEvent.status) ||
+      currentEvent.lockAt.getTime() <= Date.now()
+    ) {
+      throw new Error("Cannot import fights after this event has closed.");
+    }
+    const lineupCount = await tx.fantasyLineup.count({ where: { eventId: event.id } });
+    if (lineupCount > 0) {
+      throw new Error("Cannot recreate fights or change odds after fantasy lineups have been saved.");
+    }
+    if (SHOULD_REPLACE && await tx.pickSubmission.count({ where: { eventId: event.id } })) {
+      throw new Error("Cannot recreate fights after picks have been submitted.");
+    }
+    if (!SHOULD_REPLACE && await tx.fight.count({ where: { eventId: event.id } })) {
+      throw new Error("This event already has fights. Use --replace only before entries open.");
+    }
     if (SHOULD_REPLACE) {
       console.log("\nDeleting existing fights for event...");
 
@@ -190,6 +210,10 @@ async function main() {
           fighterBId: pair.fighterB.id,
           order: pair.order,
           weightClass: pair.weightClass,
+          fighterAOdds: pair.fighterAOdds,
+          fighterBOdds: pair.fighterBOdds,
+          fighterAIsUnderdog: pair.fighterAIsUnderdog,
+          fighterBIsUnderdog: pair.fighterBIsUnderdog,
         },
       });
     }

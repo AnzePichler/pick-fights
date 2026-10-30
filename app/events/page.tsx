@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getEventLeaderboardRows, type LeaderboardRow } from "@/lib/leaderboards";
+import { EVENTS_PER_PAGE, getPagination } from "@/lib/pagination";
 import Navbar from "@/components/Navbar";
 
 export const dynamic = "force-dynamic";
@@ -26,19 +28,11 @@ type PickResultStatus =
   | "NO_CONTEST"
   | "CANCELLED";
 
-type LeaderboardRow = {
-  userId: string;
-  position: number;
-  name: string;
-  username: string;
-  imageUrl: string | null;
-  correct: number;
-  totalPicked: number;
-  correctPercentage: number;
-  points: number;
+type PageProps = {
+  searchParams?: Promise<{ page?: string | string[] }>;
 };
 
-export default async function EventsPage() {
+export default async function EventsPage({ searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user?.id) {
@@ -47,100 +41,103 @@ export default async function EventsPage() {
 
   console.time("events-page: events query");
 
-  const events = await prisma.event.findMany({
-    where: {
-      status: "COMPLETED",
-      slug: {
-        not: "ufc-test",
-      },
-      submissions: {
-        some: {},
-      },
-    },
-    orderBy: {
-      startsAt: "desc",
-    },
-    include: {
-      fights: {
-        where: {
-          status: "ACTIVE",
-        },
-        include: {
-          fighterA: {
-            select: {
-              id: true,
-              name: true,
-              imageUrl: true,
-              countryFlagUrl: true,
-              country: true,
-              record: true,
-            },
-          },
-          fighterB: {
-            select: {
-              id: true,
-              name: true,
-              imageUrl: true,
-              countryFlagUrl: true,
-              country: true,
-              record: true,
-            },
-          },
-          result: {
-            select: {
-              status: true,
-              winnerFighterId: true,
-            },
-          },
-        },
-        orderBy: {
-          order: "asc",
-        },
-      },
+  const pagination = getPagination((await searchParams)?.page);
 
-      submissions: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              imageUrl: true,
-            },
-          },
-          choices: true,
+  const [events, totalEvents] = await Promise.all([
+    prisma.event.findMany({
+      skip: pagination.skip,
+      take: pagination.take,
+      where: {
+        status: "COMPLETED",
+        slug: {
+          not: "ufc-test",
+        },
+        submissions: {
+          some: {},
         },
       },
+      orderBy: [{ startsAt: "desc" }, { id: "desc" }],
+      include: {
+        fights: {
+          where: {
+            status: "ACTIVE",
+          },
+          include: {
+            fighterA: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+                countryFlagUrl: true,
+                country: true,
+                record: true,
+              },
+            },
+            fighterB: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+                countryFlagUrl: true,
+                country: true,
+                record: true,
+              },
+            },
+            result: {
+              select: {
+                status: true,
+                winnerFighterId: true,
+              },
+            },
+          },
+          orderBy: {
+            order: "asc",
+          },
+        },
 
-      userScores: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              imageUrl: true,
+        submissions: {
+          select: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                imageUrl: true,
+              },
+            },
+            choices: {
+              select: { fightId: true, pickedFighterId: true },
             },
           },
         },
-        orderBy: [
-          {
-            points: "desc",
-          },
-          {
-            correct: "desc",
-          },
-          {
-            correctPercentage: "desc",
-          },
-        ],
       },
-    },
-  });
+    }),
+    prisma.event.count({
+      where: {
+        status: "COMPLETED",
+        slug: {
+          not: "ufc-test",
+        },
+        submissions: {
+          some: {},
+        },
+      },
+    }),
+  ]);
+
+  const lastPage = Math.max(1, Math.ceil(totalEvents / EVENTS_PER_PAGE));
+
+  if (pagination.page > lastPage) {
+    redirect(`/events?page=${lastPage}`);
+  }
 
   console.timeEnd("events-page: events query");
 
-  const eventCards = events.map((event) => {
+  const leaderboardRowsByEvent = await Promise.all(
+    events.map((event) => getEventLeaderboardRows(event.id)),
+  );
+
+  const eventCards = events.map((event, index) => {
     const fightMap = new Map(
       event.fights.map((fight) => [
         fight.id,
@@ -184,19 +181,7 @@ export default async function EventsPage() {
       }
     }
 
-    const leaderboardRows: LeaderboardRow[] = event.userScores.map(
-      (score, index) => ({
-        userId: score.user.id,
-        position: index + 1,
-        name: score.user.displayName || score.user.username,
-        username: score.user.username,
-        imageUrl: score.user.imageUrl,
-        correct: score.correct,
-        totalPicked: score.totalPicked,
-        correctPercentage: score.correctPercentage,
-        points: score.points,
-      }),
-    );
+    const leaderboardRows = leaderboardRowsByEvent[index];
 
     return {
       id: event.id,
@@ -338,6 +323,34 @@ export default async function EventsPage() {
                 );
               })}
             </div>
+          )}
+          {totalEvents > EVENTS_PER_PAGE && (
+            <nav
+              aria-label="Event archive pagination"
+              className="mt-6 flex items-center justify-between gap-4 text-sm font-bold"
+            >
+              <a
+                href={`/events?page=${pagination.page - 1}`}
+                aria-disabled={pagination.page === 1}
+                className={`rounded-xl bg-white px-4 py-3 shadow-sm ${pagination.page === 1 ? "pointer-events-none text-neutral-400" : "text-[#2b7fff]"}`}
+                tabIndex={pagination.page === 1 ? -1 : undefined}
+              >
+                Previous
+              </a>
+              <span>
+                Page {pagination.page} of {lastPage}
+              </span>
+              <a
+                href={`/events?page=${pagination.page + 1}`}
+                aria-disabled={pagination.skip + pagination.take >= totalEvents}
+                className={`rounded-xl bg-white px-4 py-3 shadow-sm ${pagination.skip + pagination.take >= totalEvents ? "pointer-events-none text-neutral-400" : "text-[#2b7fff]"}`}
+                tabIndex={
+                  pagination.skip + pagination.take >= totalEvents ? -1 : undefined
+                }
+              >
+                Next
+              </a>
+            </nav>
           )}
         </section>
       </main>

@@ -3,11 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "local:setup": "node scripts/local-sandbox.mjs setup",
+    "local:dev": "node scripts/local-sandbox.mjs dev",
+    "local:stop": "node scripts/local-sandbox.mjs stop",
+    "local:simulate": "node scripts/local-sandbox.mjs simulate",
     "dev": "next dev",
     "build": "prisma generate --schema=./prisma/schema.prisma && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate --schema=./prisma/schema.prisma"
+    "postinstall": "prisma generate --schema=./prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy",
+    "avatars:migrate": "tsx scripts/migrate-avatars.ts",
+    "scores:backfill": "tsx scripts/backfill-scores.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",

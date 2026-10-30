@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { EVENTS_PER_PAGE, getPagination } from "@/lib/pagination";
 import Navbar from "@/components/Navbar";
 import {
   calculatePickPoints,
@@ -14,92 +15,117 @@ export const dynamic = "force-dynamic";
 
 type PickResultState = "pending" | "correct" | "wrong" | "draw";
 
-export default async function MyPicksPage() {
+type PageProps = {
+  searchParams?: Promise<{ page?: string | string[] }>;
+};
+
+export default async function MyPicksPage({ searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  console.time("my-picks: submissions query");
+  const pagination = getPagination((await searchParams)?.page);
 
-  const submissions = await prisma.pickSubmission.findMany({
-    where: {
-      userId: session.user.id,
-      event: {
-        slug: {
-          not: "ufc-test",
+  const [submissions, totalEvents] = await Promise.all([
+    prisma.pickSubmission.findMany({
+      skip: pagination.skip,
+      take: pagination.take,
+      where: {
+        userId: session.user.id,
+        event: {
+          slug: {
+            not: "ufc-test",
+          },
         },
       },
-    },
-    orderBy: {
-      submittedAt: "desc",
-    },
-    select: {
-      id: true,
-      submittedAt: true,
-      event: {
-        select: {
-          id: true,
-          name: true,
-          status: true,
-          startsAt: true,
+      orderBy: [{ submittedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        submittedAt: true,
+        event: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            startsAt: true,
+            resultVersion: true,
+          },
         },
-      },
-      choices: {
-        select: {
-          id: true,
-          fightId: true,
-          pickedFighterId: true,
-          pickedMethod: true,
-          pickedRound: true,
-          fight: {
-            select: {
-              id: true,
-              fighterA: {
-                select: {
-                  id: true,
-                  name: true,
-                  imageUrl: true,
+        choices: {
+          select: {
+            id: true,
+            fightId: true,
+            pickedFighterId: true,
+            pickedMethod: true,
+            pickedRound: true,
+            points: true,
+            rarityMultiplier: true,
+            winnerPickCount: true,
+            totalPickCount: true,
+            fight: {
+              select: {
+                id: true,
+                fighterA: {
+                  select: {
+                    id: true,
+                    name: true,
+                    imageUrl: true,
+                  },
                 },
-              },
-              fighterB: {
-                select: {
-                  id: true,
-                  name: true,
-                  imageUrl: true,
+                fighterB: {
+                  select: {
+                    id: true,
+                    name: true,
+                    imageUrl: true,
+                  },
                 },
-              },
-              result: {
-                select: {
-                  status: true,
-                  winnerFighterId: true,
-                  method: true,
-                  round: true,
+                result: {
+                  select: {
+                    status: true,
+                    winnerFighterId: true,
+                    method: true,
+                    round: true,
+                  },
                 },
               },
             },
           },
-        },
-        orderBy: {
-          fight: {
-            order: "asc",
+          orderBy: {
+            fight: {
+              order: "asc",
+            },
           },
         },
       },
-    },
-  });
+    }),
+    prisma.pickSubmission.count({
+      where: {
+        userId: session.user.id,
+        event: {
+          slug: {
+            not: "ufc-test",
+          },
+        },
+      },
+    }),
+  ]);
 
-  console.timeEnd("my-picks: submissions query");
+  const lastPage = Math.max(1, Math.ceil(totalEvents / EVENTS_PER_PAGE));
+
+  if (pagination.page > lastPage) {
+    redirect(`/my-picks?page=${lastPage}`);
+  }
 
   const eventIds = submissions.map((submission) => submission.event.id);
 
-  console.time("my-picks: cached scores query");
+  const statsEventIds = submissions.filter((submission) => submission.event.resultVersion === 0).map((submission) => submission.event.id);
 
-  const cachedScores =
+  const [cachedScores, statCounts] = await Promise.all([
     eventIds.length === 0
-      ? []
-      : await prisma.userEventScore.findMany({
+      ? Promise.resolve([])
+      : prisma.userEventScore.findMany({
           where: {
             userId: session.user.id,
             eventId: {
@@ -113,74 +139,50 @@ export default async function MyPicksPage() {
             points: true,
             correctPercentage: true,
           },
-        });
-
-  console.timeEnd("my-picks: cached scores query");
+        }),
+    statsEventIds.length === 0
+      ? Promise.resolve([])
+      : prisma.pickChoice.groupBy({
+          by: ["fightId", "pickedFighterId"],
+          where: {
+            submission: { eventId: { in: statsEventIds } },
+            fight: { result: { is: { status: "WINNER" } } },
+          },
+          _count: { _all: true },
+        }),
+  ]);
 
   const scoreByEventId = new Map(
     cachedScores.map((score) => [score.eventId, score]),
   );
 
-  console.time("my-picks: all submissions stats query");
-
-  const statChoices =
-    eventIds.length === 0
-      ? []
-      : await prisma.pickChoice.findMany({
-          where: {
-            submission: {
-              eventId: {
-                in: eventIds,
-              },
-            },
-          },
-          select: {
-            fightId: true,
-            pickedFighterId: true,
-            fight: {
-              select: {
-                result: {
-                  select: {
-                    status: true,
-                    winnerFighterId: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-
-  console.timeEnd("my-picks: all submissions stats query");
+  const winnerByFightId = new Map(
+    submissions.flatMap((submission) =>
+      submission.choices.map(
+        (choice) =>
+          [choice.fightId, choice.fight.result?.winnerFighterId] as const,
+      ),
+    ),
+  );
   const fightStats = new Map<
     string,
-    {
-      totalPickCount: number;
-      winnerPickCount: number;
-    }
+    { totalPickCount: number; winnerPickCount: number }
   >();
 
-  for (const choice of statChoices) {
-    const result = choice.fight.result;
-
-    if (result?.status !== "WINNER" || !result.winnerFighterId) {
-      continue;
-    }
-
-    const current = fightStats.get(choice.fightId) || {
+  for (const group of statCounts) {
+    const current = fightStats.get(group.fightId) || {
       totalPickCount: 0,
       winnerPickCount: 0,
     };
 
-    current.totalPickCount += 1;
+    current.totalPickCount += group._count._all;
 
-    if (choice.pickedFighterId === result.winnerFighterId) {
-      current.winnerPickCount += 1;
+    if (group.pickedFighterId === winnerByFightId.get(group.fightId)) {
+      current.winnerPickCount += group._count._all;
     }
 
-    fightStats.set(choice.fightId, current);
+    fightStats.set(group.fightId, current);
   }
-
-  console.time("my-picks: build cards");
 
   const cards = submissions.map((submission) => {
     let liveCorrect = 0;
@@ -208,14 +210,15 @@ export default async function MyPicksPage() {
         liveCorrect += 1;
       }
 
-      const stats = fightStats.get(choice.fightId) || {
+      const persisted = submission.event.resultVersion > 0;
+      const stats = persisted ? { totalPickCount: choice.totalPickCount, winnerPickCount: choice.winnerPickCount } : fightStats.get(choice.fightId) || {
         totalPickCount: 0,
         winnerPickCount: 0,
       };
 
-      const rarityMultiplier = getRarityMultiplier(stats);
+      const rarityMultiplier = persisted ? choice.rarityMultiplier : getRarityMultiplier(stats);
 
-      const pickPoints = calculatePickPoints({
+      const pickPoints = persisted ? choice.points : calculatePickPoints({
         pickedFighterId: choice.pickedFighterId,
         pickedMethod: choice.pickedMethod,
         pickedRound: choice.pickedRound,
@@ -281,8 +284,6 @@ export default async function MyPicksPage() {
       picks,
     };
   });
-
-  console.timeEnd("my-picks: build cards");
 
   return (
     <>
@@ -396,6 +397,34 @@ export default async function MyPicksPage() {
                 </details>
               ))}
             </div>
+          )}
+          {totalEvents > EVENTS_PER_PAGE && (
+            <nav
+              aria-label="Pick history pagination"
+              className="mt-6 flex items-center justify-between gap-4 text-sm font-bold"
+            >
+              <a
+                href={`/my-picks?page=${pagination.page - 1}`}
+                aria-disabled={pagination.page === 1}
+                className={`rounded-xl bg-white px-4 py-3 shadow-sm ${pagination.page === 1 ? "pointer-events-none text-neutral-400" : "text-[#2b7fff]"}`}
+                tabIndex={pagination.page === 1 ? -1 : undefined}
+              >
+                Previous
+              </a>
+              <span>
+                Page {pagination.page} of {lastPage}
+              </span>
+              <a
+                href={`/my-picks?page=${pagination.page + 1}`}
+                aria-disabled={pagination.skip + pagination.take >= totalEvents}
+                className={`rounded-xl bg-white px-4 py-3 shadow-sm ${pagination.skip + pagination.take >= totalEvents ? "pointer-events-none text-neutral-400" : "text-[#2b7fff]"}`}
+                tabIndex={
+                  pagination.skip + pagination.take >= totalEvents ? -1 : undefined
+                }
+              >
+                Next
+              </a>
+            </nav>
           )}
         </section>
       </main>

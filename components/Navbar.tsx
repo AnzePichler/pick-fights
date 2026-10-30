@@ -3,6 +3,7 @@ import { signOut } from "@/auth";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import LiveResultsRefresh from "./LiveResultsRefresh";
 
 export default async function Navbar() {
   const session = await auth();
@@ -24,7 +25,11 @@ export default async function Navbar() {
             href="/picks"
             className="text-md font-[1000] text-neutral-700 transition hover:text-neutral-800"
           >
-            Submit picks
+            Picks
+          </Link>
+
+          <Link href="/fantasy" className="text-md font-semibold text-gray-700 transition hover:text-neutral-800">
+            Fantasy
           </Link>
 
           <Link
@@ -119,6 +124,10 @@ export default async function Navbar() {
               Picks
             </Link>
 
+            <Link href="/fantasy" className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200">
+              Fantasy
+            </Link>
+
             <Link
               href="/events"
               className="rounded-xl bg-neutral-100 px-3 py-2 text-center text-sm font-black text-neutral-700 transition hover:bg-neutral-200"
@@ -142,6 +151,7 @@ export default async function Navbar() {
           </div>
         </div>
       )}
+      {session?.user && <LiveResultsRefresh />}
     </header>
   );
 }

@@ -72,10 +72,12 @@ export default function AdminResultsForm({ event }: Props) {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [dirtyFightIds, setDirtyFightIds] = useState<Set<string>>(new Set());
   const [markCompleted, setMarkCompleted] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   function updateFightResult(fightId: string, resultValue: string) {
+    setDirtyFightIds((current) => new Set(current).add(fightId));
     setResults((current) => {
       const currentResult = current[fightId];
 
@@ -106,6 +108,7 @@ export default function AdminResultsForm({ event }: Props) {
   }
 
   function updateMethod(fightId: string, method: string) {
+    setDirtyFightIds((current) => new Set(current).add(fightId));
     setResults((current) => ({
       ...current,
       [fightId]: {
@@ -116,6 +119,7 @@ export default function AdminResultsForm({ event }: Props) {
   }
 
   function updateRound(fightId: string, round: string) {
+    setDirtyFightIds((current) => new Set(current).add(fightId));
     setResults((current) => ({
       ...current,
       [fightId]: {
@@ -130,6 +134,15 @@ export default function AdminResultsForm({ event }: Props) {
     setMessage(null);
 
     try {
+      const changedResults = Object.values(results).filter((draft) => {
+        if (!dirtyFightIds.has(draft.fightId)) return false;
+        const previous = event.fights.find((fight) => fight.id === draft.fightId)?.result;
+        return draft.status !== (previous?.status ?? "PENDING") || draft.winnerFighterId !== (previous?.winnerFighterId ?? null) || draft.method !== (previous?.method ?? null) || draft.round !== (previous?.round ?? null);
+      });
+      if (!changedResults.length && !markCompleted) {
+        setMessage("No result changes to save.");
+        return;
+      }
       const response = await fetch("/api/admin/results", {
         method: "PATCH",
         headers: {
@@ -138,7 +151,7 @@ export default function AdminResultsForm({ event }: Props) {
         body: JSON.stringify({
           eventId: event.id,
           markCompleted,
-          results: Object.values(results),
+          results: changedResults,
         }),
       });
 
@@ -150,6 +163,7 @@ export default function AdminResultsForm({ event }: Props) {
       }
 
       setMessage("Results saved.");
+      setDirtyFightIds(new Set());
       router.refresh();
     } catch (error) {
       console.error(error);

@@ -3,24 +3,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import {
+  getAllTimeLeaderboardRows,
+  getEventLeaderboardRows,
+  getLeaderboardEvent,
+  type LeaderboardRow,
+} from "@/lib/leaderboards";
 import Navbar from "@/components/Navbar";
 
 export const dynamic = "force-dynamic";
 
 type Scope = "event" | "alltime";
-
-type LeaderboardRow = {
-  userId: string;
-  position: number;
-  name: string;
-  username: string;
-  imageUrl: string | null;
-  correct: number;
-  totalPicked: number;
-  correctPercentage: number;
-  points: number;
-};
 
 type PageProps = {
   searchParams?: Promise<{
@@ -42,72 +35,17 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const scope: Scope = params?.scope === "alltime" ? "alltime" : "event";
 
-  console.time("leaderboard: active event query");
-
-  const activeEvent = await prisma.event.findFirst({
-    where: {
-      isActive: true,
-      slug: {
-        not: "ufc-test",
-      },
-      status: {
-        in: ["OPEN", "LOCKED"],
-      },
-    },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      fights: {
-        select: {
-          result: {
-            select: {
-              status: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  console.timeEnd("leaderboard: active event query");
-
-  const activeEventHasResult =
-    activeEvent?.fights.some((fight) => {
-      return fight.result && fight.result.status !== "PENDING";
-    }) ?? false;
-
-  console.time("leaderboard: last completed event query");
-
-  const lastCompletedEvent = await prisma.event.findFirst({
-    where: {
-      slug: {
-        not: "ufc-test",
-      },
-      status: "COMPLETED",
-    },
-    orderBy: {
-      startsAt: "desc",
-    },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-    },
-  });
-
-  console.timeEnd("leaderboard: last completed event query");
-
-  const leaderboardEvent = activeEventHasResult
-    ? activeEvent
-    : (lastCompletedEvent ?? activeEvent);
+  const [leaderboardEvent, allTimeRows] = await Promise.all([
+    getLeaderboardEvent(),
+    scope === "alltime" ? getAllTimeLeaderboardRows() : Promise.resolve([]),
+  ]);
 
   const rows =
     scope === "event"
       ? leaderboardEvent
         ? await getEventLeaderboardRows(leaderboardEvent.id)
         : []
-      : await getAllTimeLeaderboardRows();
+      : allTimeRows;
 
   return (
     <>
@@ -186,120 +124,6 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
       </main>
     </>
   );
-}
-
-async function getEventLeaderboardRows(
-  eventId: string,
-): Promise<LeaderboardRow[]> {
-  const scores = await prisma.userEventScore.findMany({
-    where: {
-      eventId,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          username: true,
-          displayName: true,
-          imageUrl: true,
-        },
-      },
-    },
-    orderBy: [
-      {
-        points: "desc",
-      },
-      {
-        correct: "desc",
-      },
-      {
-        correctPercentage: "desc",
-      },
-    ],
-  });
-
-  return scores.map((score, index) => ({
-    userId: score.user.id,
-    position: index + 1,
-    name: score.user.displayName || score.user.username,
-    username: score.user.username,
-    imageUrl: score.user.imageUrl,
-    correct: score.correct,
-    totalPicked: score.totalPicked,
-    correctPercentage: score.correctPercentage,
-    points: score.points,
-  }));
-}
-
-async function getAllTimeLeaderboardRows(): Promise<LeaderboardRow[]> {
-  const totals = await prisma.userEventScore.groupBy({
-    by: ["userId"],
-    where: {
-      event: {
-        slug: {
-          not: "ufc-test",
-        },
-        status: "COMPLETED",
-      },
-    },
-    _sum: {
-      points: true,
-      correct: true,
-      totalPicked: true,
-    },
-  });
-
-  const users = await prisma.user.findMany({
-    where: {
-      id: {
-        in: totals.map((row) => row.userId),
-      },
-    },
-    select: {
-      id: true,
-      username: true,
-      displayName: true,
-      imageUrl: true,
-    },
-  });
-
-  const userById = new Map(users.map((user) => [user.id, user]));
-
-  const rows = totals.map((row) => {
-    const user = userById.get(row.userId);
-
-    const points = row._sum.points || 0;
-    const correct = row._sum.correct || 0;
-    const totalPicked = row._sum.totalPicked || 0;
-
-    return {
-      userId: row.userId,
-      position: 0,
-      name: user?.displayName || user?.username || "Unknown",
-      username: user?.username || "unknown",
-      imageUrl: user?.imageUrl || null,
-      points,
-      correct,
-      totalPicked,
-      correctPercentage:
-        totalPicked === 0 ? 0 : Math.round((correct / totalPicked) * 1000) / 10,
-    };
-  });
-
-  return rows
-    .sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.correct !== a.correct) return b.correct - a.correct;
-      if (b.correctPercentage !== a.correctPercentage) {
-        return b.correctPercentage - a.correctPercentage;
-      }
-
-      return a.name.localeCompare(b.name);
-    })
-    .map((row, index) => ({
-      ...row,
-      position: index + 1,
-    }));
 }
 
 function LeaderboardTable({ rows }: { rows: LeaderboardRow[] }) {

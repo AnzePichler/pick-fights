@@ -1,0 +1,21 @@
+name: pickfights-fantasy-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pickfights_local
+      POSTGRES_DB: pickfights_fantasy_local
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:55439:5432"
+    volumes:
+      - local_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pickfights_local -d pickfights_fantasy_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  local_pgdata:

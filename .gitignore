@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+.local-sandbox/
 
 # next
 .next/
@@ -31,3 +32,4 @@ pnpm-debug.log*
 # local AI/editor stuff if you want
 .idea/
 .vscode/
+.vercel

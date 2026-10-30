@@ -70,6 +70,7 @@ export default function AccountForm({ user }: Props) {
         return;
       }
 
+      setImageUrl(data.user.imageUrl || "");
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -186,7 +187,7 @@ function getInitials(name: string) {
 
 function compressImageToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       reject(new Error("File is not an image."));
       return;
     }
@@ -227,7 +228,9 @@ function compressImageToDataUrl(file: File): Promise<string> {
 
         const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
 
-        if (dataUrl.length > 750_000) {
+        const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
+        const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+        if ((encoded.length * 3) / 4 - padding > 256 * 1024) {
           reject(new Error("Image is too large."));
           return;
         }

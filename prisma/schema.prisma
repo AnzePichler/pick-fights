@@ -46,35 +46,71 @@ enum FightResultStatus {
   CANCELLED
 }
 
+enum ResultSource {
+  MANUAL
+  UFCALENDAR
+}
+
+enum FantasySlot {
+  CAPTAIN
+  FINISH_ONE
+  FINISH_TWO
+  DECISION
+  UNDERDOG
+}
+
 model User {
-  id           String           @id @default(cuid())
-  email        String           @unique
-  username     String           @unique
-  displayName  String?
-  imageUrl     String?          @db.Text
-  passwordHash String?
-  role         UserRole         @default(USER)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @default(now()) @updatedAt
-  submissions  PickSubmission[]
-  eventScores  UserEventScore[]
+  id             String           @id @default(cuid())
+  email          String           @unique
+  username       String           @unique
+  displayName    String?
+  imageUrl       String?          @db.Text
+  passwordHash   String?
+  role           UserRole         @default(USER)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @default(now()) @updatedAt
+  submissions    PickSubmission[]
+  eventScores    UserEventScore[]
+  fantasyLineups FantasyLineup[]
+  avatar         UserAvatar?
+}
+
+model UserAvatar {
+  id          String @id @default(cuid())
+  userId      String @unique
+  contentType String
+  data        Bytes
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Event {
-  id          String           @id @default(cuid())
-  name        String
-  slug        String           @unique
-  startsAt    DateTime
-  lockAt      DateTime
-  status      EventStatus      @default(DRAFT)
-  isActive    Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @default(now()) @updatedAt
-  fights      Fight[]
-  submissions PickSubmission[]
-  userScores   UserEventScore[]
+  id              String           @id @default(cuid())
+  name            String
+  slug            String           @unique
+  startsAt        DateTime
+  lockAt          DateTime
+  status          EventStatus      @default(DRAFT)
+  isActive        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @default(now()) @updatedAt
+  fights          Fight[]
+  submissions     PickSubmission[]
+  userScores      UserEventScore[]
+  fantasyLineups  FantasyLineup[]
+  syncEnabled     Boolean          @default(false)
+  providerEventId String?          @unique
+  nextSyncAt      DateTime?
+  syncLeaseUntil  DateTime?
+  syncLeaseToken  String?
+  lastSyncAt      DateTime?
+  lastSyncError   String?          @db.Text
+  syncFailures    Int              @default(0)
+  syncFinishedAt  DateTime?
+  resultVersion   Int              @default(0)
+  lastResultAt    DateTime?
 
   @@index([isActive, status])
+  @@index([syncEnabled, nextSyncAt])
 }
 
 model Fighter {
@@ -103,27 +139,65 @@ model Fighter {
 }
 
 model Fight {
-  id          String      @id @default(cuid())
-  eventId     String
-  fighterAId  String
-  fighterBId  String
-  order       Int
-  status      FightStatus @default(ACTIVE)
-  weightClass String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @default(now()) @updatedAt
+  id                 String      @id @default(cuid())
+  eventId            String
+  fighterAId         String
+  fighterBId         String
+  order              Int
+  status             FightStatus @default(ACTIVE)
+  weightClass        String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @default(now()) @updatedAt
+  fighterAOdds       Int?
+  fighterBOdds       Int?
+  fighterAIsUnderdog Boolean     @default(false)
+  fighterBIsUnderdog Boolean     @default(false)
+  providerFightId    String?     @unique
+  providerFighterAId String?
+  providerFighterBId String?
 
-  event    Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  fighterA Fighter      @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)
-  fighterB Fighter      @relation("FighterB", fields: [fighterBId], references: [id], onDelete: Restrict)
-  picks    PickChoice[]
-  result   FightResult?
+  event          Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fighterA       Fighter             @relation("FighterA", fields: [fighterAId], references: [id], onDelete: Restrict)
+  fighterB       Fighter             @relation("FighterB", fields: [fighterBId], references: [id], onDelete: Restrict)
+  picks          PickChoice[]
+  result         FightResult?
+  resultChanges  FightResultChange[]
+  fantasyChoices FantasyChoice[]
 
   @@unique([eventId, order])
   @@index([eventId])
   @@index([eventId, status])
   @@index([fighterAId])
   @@index([fighterBId])
+}
+
+model FantasyLineup {
+  id        String   @id @default(cuid())
+  userId    String
+  eventId   String
+  updatedAt DateTime @updatedAt
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  choices FantasyChoice[]
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+}
+
+model FantasyChoice {
+  id        String      @id @default(cuid())
+  lineupId  String
+  slot      FantasySlot
+  fightId   String
+  fighterId String
+
+  lineup FantasyLineup @relation(fields: [lineupId], references: [id], onDelete: Cascade)
+  fight  Fight         @relation(fields: [fightId], references: [id], onDelete: Cascade)
+
+  @@unique([lineupId, slot])
+  @@unique([lineupId, fighterId])
+  @@index([fightId])
 }
 
 model PickSubmission {
@@ -142,12 +216,16 @@ model PickSubmission {
 }
 
 model PickChoice {
-  id              String      @id @default(cuid())
-  submissionId    String
-  fightId         String
-  pickedFighterId String
-  pickedMethod    PickMethod?
-  pickedRound     Int?
+  id               String      @id @default(cuid())
+  submissionId     String
+  fightId          String
+  pickedFighterId  String
+  pickedMethod     PickMethod?
+  pickedRound      Int?
+  points           Int         @default(0)
+  rarityMultiplier Float       @default(1)
+  winnerPickCount  Int         @default(0)
+  totalPickCount   Int         @default(0)
 
   submission    PickSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   fight         Fight          @relation(fields: [fightId], references: [id], onDelete: Cascade)
@@ -167,11 +245,23 @@ model FightResult {
   round           Int?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @default(now()) @updatedAt
+  source          ResultSource      @default(MANUAL)
 
   fight         Fight    @relation(fields: [fightId], references: [id], onDelete: Cascade)
   winnerFighter Fighter? @relation(fields: [winnerFighterId], references: [id], onDelete: Restrict)
 
   @@index([winnerFighterId])
+}
+
+model FightResultChange {
+  id        String       @id @default(cuid())
+  fightId   String
+  source    ResultSource
+  snapshot  Json
+  createdAt DateTime     @default(now())
+  fight     Fight        @relation(fields: [fightId], references: [id], onDelete: Cascade)
+
+  @@index([fightId, createdAt])
 }
 
 model UserEventScore {
