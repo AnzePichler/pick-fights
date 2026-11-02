@@ -48,13 +48,13 @@ export default function FightCard({
       : "";
 
   const selectedHighlightClass = selectedPickIsCorrect
-    ? `${selectedSideGradient} from-green-500 via-transparent to-transparent`
+    ? `${selectedSideGradient} from-[#2ca778] via-transparent to-transparent`
     : selectedPickIsWrong
-      ? `${selectedSideGradient} from-red-500 via-transparent to-transparent`
+      ? `${selectedSideGradient} from-[#f84c55] via-transparent to-transparent`
       : selectedPickIsDrawLike
         ? `${selectedSideGradient} from-neutral-500 via-transparent to-transparent`
         : selectedFighterId
-          ? `${selectedSideGradient} from-blue-500 via-transparent to-transparent`
+          ? `${selectedSideGradient} from-[#2b7fff] via-transparent to-transparent`
           : "";
 
   const selectedIconSrc = selectedPickIsCorrect
@@ -244,7 +244,7 @@ function MethodRow({
           {label}
         </span>
 
-        <span className="text-right text-xs font-semibold text-neutral-700 md:text-lg">
+        <span className="text-right text-xs font-semibold text-[#2ca778] md:text-lg">
           {percent === null ? "—" : `${percent}%`}
         </span>
 
@@ -257,7 +257,7 @@ function MethodRow({
     <div className="grid grid-cols-[minmax(28px,1fr)_32px_22px] items-center gap-1.5 md:grid-cols-[1fr_54px_36px] md:gap-3">
       <OutsideToCenterBar percent={percent} side="right" />
 
-      <span className="text-left text-xs font-semibold text-neutral-700 md:text-lg">
+      <span className="text-left text-xs font-semibold text-[#2ca778] md:text-lg">
         {percent === null ? "—" : `${percent}%`}
       </span>
 
@@ -280,7 +280,7 @@ function OutsideToCenterBar({
   return (
     <div className="h-2.5 w-full overflow-hidden rounded-sm bg-neutral-100 md:h-4">
       <div
-        className={`h-full bg-green-600 ${
+        className={`h-full bg-[#2ca778] ${
           side === "left" ? "mr-auto" : "ml-auto"
         }`}
         style={{

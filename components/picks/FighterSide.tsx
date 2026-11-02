@@ -29,7 +29,7 @@ export default function FighterSide({
         onSelect();
       }}
       className={`w-full rounded-2xl p-1.5 transition md:p-3 ${
-        isLocked ? "cursor-default" : "hover:bg-zinc-50"
+        isLocked ? "cursor-default" : "cursor-pointer"
       } ${isRight ? "text-center md:text-right" : "text-center md:text-left"}`}
     >
       <div

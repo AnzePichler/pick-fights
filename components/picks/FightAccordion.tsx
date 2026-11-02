@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import FightCard from "./FightCard";
+import FinishPicker from "./FinishPicker";
 import SubmitPicksButton from "./SubmitPicksButton";
 import type { PickDraft } from "../../types/types";
 import type { PicksFight } from "./types";
@@ -150,11 +151,11 @@ export default function FightAccordion({
               isLocked={isFightLocked(fight.id)}
             />
 
-            {view === "mine" && selectedPicks[fight.id] && (
-              <MethodPredictionPicker
+            {view === "mine" && (
+              <FinishPicker
                 pick={selectedPicks[fight.id]}
                 result={fight.result}
-                isLocked={isFightLocked(fight.id)}
+                isLocked={isSubmitting || isFightLocked(fight.id)}
                 onChange={(updatedPick) => {
                   setSelectedPicks((current) => ({
                     ...current,
@@ -313,9 +314,9 @@ function PickGroup({
 
   const outcomeGradient =
     outcome === "winner"
-      ? `${directionClass} from-green-500 via-transparent to-transparent`
+      ? `${directionClass} from-[#2ca778] via-transparent to-transparent`
       : outcome === "loser"
-        ? `${directionClass} from-red-500 via-transparent to-transparent`
+        ? `${directionClass} from-[#f84c55] via-transparent to-transparent`
         : outcome === "draw"
           ? `${directionClass} from-neutral-500 via-transparent to-transparent`
           : "bg-transparent";
@@ -464,248 +465,6 @@ function Avatar({
         </span>
       </span>
     </div>
-  );
-}
-
-function MethodPredictionPicker({
-  pick,
-  result,
-  isLocked,
-  onChange,
-}: {
-  pick: PickDraft;
-  result?: {
-    status: "PENDING" | "WINNER" | "DRAW" | "NO_CONTEST" | "CANCELLED";
-    winnerFighterId: string | null;
-    method: "KO_TKO" | "SUBMISSION" | "DECISION" | null;
-    round: number | null;
-  } | null;
-  isLocked: boolean;
-  onChange: (pick: PickDraft) => void;
-}) {
-  const method = pick.method;
-  const roundsEnabled = method === "KO_TKO" || method === "SUBMISSION";
-
-  const resultHasWinner = result?.status === "WINNER";
-  const pickedWinnerIsCorrect =
-    resultHasWinner && result.winnerFighterId === pick.fighterId;
-
-  const shouldShowResultState = resultHasWinner && pickedWinnerIsCorrect;
-
-  const resultMethod = shouldShowResultState ? result.method : null;
-  const resultRound = shouldShowResultState ? result.round : null;
-
-  function selectMethod(nextMethod: "DECISION" | "KO_TKO" | "SUBMISSION") {
-    if (isLocked) return;
-
-    if (nextMethod === "DECISION") {
-      onChange({
-        ...pick,
-        method: nextMethod,
-        round: undefined,
-      });
-
-      return;
-    }
-
-    onChange({
-      ...pick,
-      method: nextMethod,
-    });
-  }
-
-  function selectRound(round: number) {
-    if (isLocked || !roundsEnabled) return;
-
-    onChange({
-      ...pick,
-      round,
-    });
-  }
-
-  return (
-    <div className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <PredictionButton
-            label="DEC"
-            state={getMethodButtonState({
-              buttonMethod: "DECISION",
-              pickedMethod: method,
-              resultMethod,
-              shouldShowResultState,
-            })}
-            disabled={isLocked}
-            onClick={() => selectMethod("DECISION")}
-          />
-
-          <PredictionButton
-            label="KO/TKO"
-            state={getMethodButtonState({
-              buttonMethod: "KO_TKO",
-              pickedMethod: method,
-              resultMethod,
-              shouldShowResultState,
-            })}
-            disabled={isLocked}
-            onClick={() => selectMethod("KO_TKO")}
-          />
-
-          <PredictionButton
-            label="SUB"
-            state={getMethodButtonState({
-              buttonMethod: "SUBMISSION",
-              pickedMethod: method,
-              resultMethod,
-              shouldShowResultState,
-            })}
-            disabled={isLocked}
-            onClick={() => selectMethod("SUBMISSION")}
-          />
-        </div>
-
-        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-          {[1, 2, 3, 4, 5].map((round) => (
-            <PredictionButton
-              key={round}
-              label={`R${round}`}
-              state={getRoundButtonState({
-                buttonRound: round,
-                pickedMethod: method,
-                pickedRound: pick.round,
-                resultMethod,
-                resultRound,
-                shouldShowResultState,
-              })}
-              disabled={isLocked || !roundsEnabled}
-              onClick={() => selectRound(round)}
-              compact
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type PredictionButtonState =
-  | "default"
-  | "selected"
-  | "correct"
-  | "wrong"
-  | "answer";
-
-function getMethodButtonState({
-  buttonMethod,
-  pickedMethod,
-  resultMethod,
-  shouldShowResultState,
-}: {
-  buttonMethod: "DECISION" | "KO_TKO" | "SUBMISSION";
-  pickedMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | undefined;
-  resultMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | null;
-  shouldShowResultState: boolean;
-}): PredictionButtonState {
-  const isPicked = pickedMethod === buttonMethod;
-  const isCorrectAnswer = resultMethod === buttonMethod;
-
-  if (!shouldShowResultState || !resultMethod) {
-    return isPicked ? "selected" : "default";
-  }
-
-  if (isPicked && isCorrectAnswer) {
-    return "correct";
-  }
-
-  if (isPicked && !isCorrectAnswer) {
-    return "wrong";
-  }
-
-  if (!isPicked && isCorrectAnswer) {
-    return "answer";
-  }
-
-  return "default";
-}
-
-function getRoundButtonState({
-  buttonRound,
-  pickedMethod,
-  pickedRound,
-  resultMethod,
-  resultRound,
-  shouldShowResultState,
-}: {
-  buttonRound: number;
-  pickedMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | undefined;
-  pickedRound: number | undefined;
-  resultMethod: "DECISION" | "KO_TKO" | "SUBMISSION" | null;
-  resultRound: number | null;
-  shouldShowResultState: boolean;
-}): PredictionButtonState {
-  const methodUsesRound =
-    pickedMethod === "KO_TKO" || pickedMethod === "SUBMISSION";
-
-  const resultUsesRound =
-    resultMethod === "KO_TKO" || resultMethod === "SUBMISSION";
-
-  const isPicked = methodUsesRound && pickedRound === buttonRound;
-  const isCorrectAnswer = resultUsesRound && resultRound === buttonRound;
-
-  if (!shouldShowResultState || !resultUsesRound || !resultRound) {
-    return isPicked ? "selected" : "default";
-  }
-
-  if (isPicked && isCorrectAnswer) {
-    return "correct";
-  }
-
-  if (isPicked && !isCorrectAnswer) {
-    return "wrong";
-  }
-
-  if (!isPicked && isCorrectAnswer) {
-    return "answer";
-  }
-
-  return "default";
-}
-
-function PredictionButton({
-  label,
-  state,
-  disabled,
-  onClick,
-  compact = false,
-}: {
-  label: string;
-  state: PredictionButtonState;
-  disabled: boolean;
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  const stateClass =
-    state === "correct"
-      ? "bg-green-600 text-white shadow-sm"
-      : state === "wrong"
-        ? "bg-red-600 text-white shadow-sm"
-        : state === "answer"
-          ? "bg-neutral-300 text-neutral-800"
-          : state === "selected"
-            ? "bg-blue-600 text-white shadow-sm"
-            : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200";
-
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={`rounded-xl font-black transition ${
-        compact ? "px-2.5 py-2 text-xs" : "px-4 py-2 text-sm"
-      } ${stateClass} ${disabled ? "cursor-default opacity-100" : ""}`}
-    >
-      {label}
-    </button>
   );
 }
 
